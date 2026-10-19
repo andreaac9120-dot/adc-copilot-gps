@@ -1,0 +1,470 @@
+// ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
+const VERSION = "1.0.3";
+const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile" };
+let imgURLs = {};
+
+// ---------- Tema ----------
+function applyTheme(t) { if (t) document.documentElement.setAttribute("data-theme", t); }
+function toggleTheme() {
+  const root = document.documentElement, cur = root.getAttribute("data-theme");
+  const isDark = cur === "dark" || (!cur && matchMedia("(prefers-color-scheme: dark)").matches);
+  const nt = isDark ? "light" : "dark";
+  root.setAttribute("data-theme", nt);
+  DB.setConf("tema", nt).catch(() => {});
+  toast(isDark ? "Tema Giorno attivato" : "Tema Notte attivato");
+}
+
+// ---------- Rete ----------
+function net() {
+  for (const el of [$("#net"), $("#net2")]) {
+    el.className = "net " + (navigator.onLine ? "on" : "off");
+    el.textContent = navigator.onLine ? "ONLINE" : "OFFLINE";
+  }
+}
+
+// ---------- Controllo dei pacchetti (D01, D04, D09, D10, D11, D12) ----------
+// Stessi vincoli dello schema 16d per tutto ciò che la scheda usa, applicati offline PRIMA del salvataggio.
+// I campi introdotti con la 1.0.2 (AFF.esito, pgos.massa_origine/massa_st) qui sono facoltativi,
+// così i pacchetti prodotti prima restano importabili; lo schema 16d li rende obbligatori per i nuovi.
+const STATI = ["V", "R", "I", "N"];
+const ESITI_AFF = ["nessuna", "presenti", "non_verificabile"];
+const ORIGINI_MASSA = ["utente", "documenti"];
+const MAX_IMG = 12 * 1024 * 1024; // caratteri base64 per immagine (circa 9 MB)
+const isObj = x => x !== null && typeof x === "object" && !Array.isArray(x);
+const isStr = x => typeof x === "string";
+const isArr = Array.isArray;
+const isSt = x => STATI.includes(x);
+function dataVera(a, m, g) { const d = new Date(Date.UTC(a, m - 1, g)); return d.getUTCFullYear() === a && d.getUTCMonth() === m - 1 && d.getUTCDate() === g; }
+
+function controlla(p) {
+  const e = [];
+  const ok = (c, msg) => { if (!c) e.push(msg); return !!c; };
+  const dato = (d, dove) => d === undefined || ok(isObj(d) && "v" in d && isSt(d.st) && (d.nota === undefined || isStr(d.nota)), `${dove}: dato non valido`);
+  const tel = (L, dove) => ok(isArr(L) && L.every(x => isArr(x) && x.length === 4 && isStr(x[0]) && isStr(x[1]) && isStr(x[2]) && isSt(x[3])), `${dove}: utenze non valide`);
+
+  if (!isObj(p) || p.formato !== "adc-copilot-pacchetto") return ["non è un pacchetto ADC COPILOT"];
+  if (p.versione_formato !== 1) return [`formato v${p.versione_formato} non supportato da questa app (v1): aggiorna l'app`];
+  const m = /^[0-9A-Za-z]+_(\d{4})-(\d{2})-(\d{2})$/.exec(isStr(p.id) ? p.id : "");
+  if (ok(m, "id mancante o non valido")) ok(dataVera(+m[1], +m[2], +m[3]), `id ${p.id}: data inesistente`);
+  ok(Number.isInteger(p.revisione) && p.revisione >= 1, "revisione mancante o minore di 1");
+  // D12 – data di creazione: formato ISO e giorno di calendario reale
+  const cr = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.exec(isStr(p.creato) ? p.creato : "");
+  ok(cr && dataVera(+cr[1], +cr[2], +cr[3]) && !isNaN(Date.parse(p.creato)), "data di creazione mancante o non valida");
+  ok(isArr(p.comandi) && p.comandi.length && p.comandi.every(isStr), "comandi mancanti");
+  ok(isArr(p.fonti) && p.fonti.length && p.fonti.every(f => isObj(f) && isStr(f.doc) && isStr(f.edizione)), "fonti mancanti");
+  if (p.input !== undefined) ok(isObj(p.input), "input non valido");
+
+  const I = p.intestazione;
+  if (ok(isObj(I), "intestazione mancante")) {
+    ok(isStr(I.treno) && I.treno, "intestazione: numero treno mancante");
+    ok(isStr(I.percorso), "intestazione: percorso mancante");
+    const dv = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(isStr(I.data_viaggio) ? I.data_viaggio : "");
+    if (ok(dv, "intestazione: data del viaggio mancante")) ok(dataVera(+dv[3], +dv[2], +dv[1]), `intestazione: data ${I.data_viaggio} inesistente`);
+    ok(isArr(I.loco) && I.loco.length && I.loco.every(l => isObj(l) && isStr(l.tipo) && isStr(l.etichetta) && (l.tratti === undefined || (isArr(l.tratti) && l.tratti.every(isStr)))), "intestazione: locomotive mancanti");
+    for (const k of ["chip", "avvisi"]) if (I[k] !== undefined) ok(isArr(I[k]) && I[k].every(isStr), `intestazione: ${k} non valido`);
+  }
+
+  const c = p.condotta;
+  if (!ok(isObj(c), "dati della scheda mancanti")) return e;
+  for (const k of ["SEG", "FIANC", "DM", "DCO", "AFF", "IND", "AFFLOC", "FLPAG", "FLLOC"]) ok(isObj(c[k]), `scheda: ${k} mancante`);
+  ok(c.PLPROT === undefined || isObj(c.PLPROT), "scheda: PLPROT non valido");
+  ok(c.GEO === undefined || isObj(c.GEO), "scheda: GEO non valido");
+  ok(isArr(c.LOCO), "scheda: LOCO mancante");
+  ok(c.PRESC === null || isObj(c.PRESC), "scheda: PRESC mancante (null se non ci sono prescrizioni)");
+  ok(isStr(c.TRENO), "scheda: TRENO mancante");
+  if (!ok(isArr(c.R) && c.R.length >= 2, "scheda: righe del percorso mancanti") || e.length) return e;
+
+  for (const [k, g] of Object.entries(c.SEG)) ok(isObj(g) && isStr(g.nome) && isStr(g.fl) && isStr(g.pag) && isStr(g.esercizio) && isSt(g.st), `tratto ${k}: dati non validi`);
+  // D11 – ogni riga località ha un id proprio: se il treno passa due volte dalla stessa località, due id diversi.
+  const ids = new Set();
+  c.R.forEach((r, i) => {
+    const n = `riga ${i + 1}`;
+    if (!ok(isObj(r) && isStr(r.n) && isStr(r.km) && ["loc", "pt", "m3"].includes(r.t), `${n}: riga non valida`)) return;
+    for (const k of ["g", "v", "ind"]) if (r[k] !== undefined) ok(isStr(r[k]), `${n} (${r.n}): ${k} non valido`);
+    if (r.s !== undefined) ok(c.SEG[r.s], `${n} (${r.n}): tratto ${r.s} inesistente`);
+    if (r.t === "loc") {
+      ok(r.s !== undefined, `${n} (${r.n}): tratto mancante`);
+      if (ok(isStr(r.id) && r.id, `${n} (${r.n}): id località mancante`)) {
+        ok(!ids.has(r.id), `${n} (${r.n}): id "${r.id}" ripetuto (ogni passaggio da una località deve avere un id proprio)`);
+        ids.add(r.id);
+      }
+    }
+    if (r.t === "m3") ok(c.PRESC, `${n} (${r.n}): riga prescrizioni senza il blocco delle prescrizioni`); // D10
+  });
+  ok(c.R[c.R.length - 1].end === true, "l'ultima riga del percorso non è segnata come arrivo");
+
+  for (const [s, L] of Object.entries(c.FIANC)) { ok(c.SEG[s], `fiancata: tratto ${s} inesistente`); ok(isArr(L) && L.every(x => isObj(x) && isStr(x.k) && isStr(x.x) && isSt(x.st) && isStr(x.src)), `fiancata ${s}: righe non valide`); }
+  for (const [s, L] of Object.entries(c.DCO)) { ok(c.SEG[s], `DCO: tratto ${s} inesistente`); tel(L, `DCO ${s}`); }
+  for (const [s, a] of Object.entries(c.AFF)) {
+    ok(c.SEG[s], `affiancate: tratto ${s} inesistente`);
+    ok(isObj(a) && isStr(a.txt) && isStr(a.src) && isSt(a.st) && (a.esito === undefined || ESITI_AFF.includes(a.esito)), `affiancate ${s}: esito non valido`);
+  }
+  // GEO facoltativo: solo coordinate documentate e riferite all'id del passaggio, non al nome.
+  if (isObj(c.GEO)) for (const [id, g] of Object.entries(c.GEO)) {
+    ok(ids.has(id), `GEO: località ${id} inesistente`);
+    ok(isObj(g) && Number.isFinite(g.lat) && Math.abs(g.lat) <= 90 &&
+      Number.isFinite(g.lon) && Math.abs(g.lon) <= 180 && isStr(g.src) && g.src.trim() && isSt(g.st),
+      `GEO ${id}: coordinate/fonte/stato non validi`);
+  }
+  for (const [id, L] of Object.entries(c.DM)) { ok(ids.has(id), `DM: località ${id} inesistente`); tel(L, `DM ${id}`); }
+  for (const [id, d] of Object.entries(c.IND)) { ok(ids.has(id), `indicatori: località ${id} inesistente`); ok(isObj(d) && isStr(d.treno) && isStr(d.src) && isSt(d.st) && isArr(d.tutti) && d.tutti.every(x => isArr(x) && x.length === 3 && x.every(isStr)), `indicatori ${id}: non validi`); }
+  for (const [id, d] of Object.entries(c.PLPROT || {})) { ok(ids.has(id), `PL protetti: località ${id} inesistente`); ok(isObj(d) && isStr(d.src) && isSt(d.st) && isArr(d.pl) && d.pl.every(x => isArr(x) && x.length === 3 && x.every(isStr)), `PL protetti ${id}: non validi`); }
+  const colOk = b => isObj(b) && isStr(b.pag) && isStr(b.sez) && isArr(b.rows) && b.rows.every(x => isArr(x) && x.length === 5 && x.slice(0, 4).every(isStr) && (x[4] === 0 || x[4] === 1));
+  for (const [id, L] of Object.entries(c.AFFLOC)) {
+    ok(ids.has(id), `affiancate: località ${id} inesistente`);
+    ok(isArr(L) && L.length && L.every(l => isObj(l) && isStr(l.linea) && isStr(l.ind) && isStr(l.fl) && isStr(l.tratto) &&
+      (l.colonna === undefined || (isObj(l.colonna) && isStr(l.colonna.sigla) && isStr(l.colonna.tit) && colOk(l.colonna.sx) && colOk(l.colonna.dx))) &&
+      (l.sigle === undefined || (isArr(l.sigle) && l.sigle.every(x => isObj(x) && isStr(x.t) && isStr(x.x) && isSt(x.st))))), `affiancate ${id}: linee non valide`);
+  }
+  for (const [k, g] of Object.entries(c.FLPAG)) ok(isObj(g) && isStr(g.titolo) && isArr(g.pag) && g.pag.length && g.pag.every(x => isObj(x) && isStr(x.t) && isStr(x.src) && isStr(x.img) && x.img.startsWith("img/")), `pagine FL ${k}: non valide`);
+  for (const [id, d] of Object.entries(c.FLLOC)) {
+    ok(ids.has(id), `pagine FL: località ${id} inesistente`);
+    if (ok(isObj(d), `pagine FL di ${id}: non valide`)) for (const [t, k] of Object.entries(d)) ok(["fianc", "schema"].includes(t) && isStr(k) && c.FLPAG[k], `pagine FL di ${id}: ${k} inesistente`);
+  }
+  ok(c.LOCO.every(l => isObj(l) && isStr(l.t) && isStr(l.x) && isSt(l.st) && isStr(l.src)), "scheda: compatibilità locomotiva non valida");
+  const Q = c.PRESC;
+  if (Q) ok(isObj(Q.riep) && isStr(Q.riep.n) && isStr(Q.riep.tratto) && isStr(Q.riep.consegnati) && isStr(Q.src) &&
+    isArr(Q.dentro) && Q.dentro.every(isStr) && isArr(Q.fuori) && Q.fuori.every(isStr) &&
+    isArr(Q.moduli) && Q.moduli.every(md => isObj(md) && ["M3", "M40", "M40DL", "M40TELEC"].includes(md.tipo) && isStr(md.n) &&
+      (md.righe === undefined || (isArr(md.righe) && md.righe.every(x => (isArr(x) && x.length === 7 && x.every(isStr)) || (isObj(x) && isStr(x.sub))))) &&
+      (md.note === undefined || isObj(md.note)) &&
+      (md.avvisi === undefined || (isArr(md.avvisi) && md.avvisi.every(a => isObj(a) && isStr(a.loc) && isStr(a.tit) && isStr(a.txt))))), "prescrizioni: dati non validi");
+
+  const F = p.formazione;
+  if (F !== undefined && F !== null && ok(isObj(F), "formazione non valida")) {
+    if (ok(isArr(F.tratti) && F.tratti.length, "formazione: tratti mancanti"))
+      F.tratti.forEach((t, i) => { if (ok(isObj(t) && isStr(t.da) && isStr(t.a) && isStr(t.linea) && typeof t.affiancata === "boolean", `formazione: tratto ${i + 1} non valido`)) for (const k of ["codifica_tc", "d4", "frenatura", "gdp"]) dato(t[k], `formazione ${t.da}–${t.a} ${k}`); });
+    ok(isArr(F.prestazione_massima) && F.prestazione_massima.every(x => isObj(x) && isStr(x.loco) && isStr(x.gdp) && isStr(x.dove) && (x.t === null || Number.isFinite(x.t)) && isSt(x.st) && isStr(x.src)), "formazione: prestazione massima non valida");
+    const G = F.pgos;
+    if (ok(isObj(G) && isArr(G.controlli), "formazione: controlli PGOS mancanti")) {
+      ok(G.massa_t === null || (Number.isFinite(G.massa_t) && G.massa_t > 0), "PGOS: massa del treno non valida");
+      ok(G.massa_origine === undefined || ORIGINI_MASSA.includes(G.massa_origine), "PGOS: origine della massa non ammessa (solo utente o documenti del treno)");
+      ok(G.massa_st === undefined || isSt(G.massa_st), "PGOS: stato della massa non valido");
+      ok(G.controlli.every(x => isObj(x) && isStr(x.t) && ["ok", "non_ok", "attenzione", "non_eseguibile"].includes(x.esito) && isSt(x.st) && isStr(x.src)), "PGOS: controlli non validi");
+      ok(G.massa_t !== null || G.controlli.every(x => x.esito === "non_eseguibile"), "PGOS: controlli con esito senza massa del treno");
+    }
+    const S = F.staffe;
+    if (S !== undefined && S !== null && ok(isObj(S) && ["ok", "non_ok", "non_eseguibile"].includes(S.esito) && isObj(S.pendenza_max) && isObj(S.grado_gravoso), "staffe: dati non validi")) {
+      dato(S.pendenza_max, "staffe: pendenza"); dato(S.grado_gravoso, "staffe: grado"); dato(S.tab36_min, "staffe: tab. 36");
+    }
+  }
+  if (p.aperti !== undefined) ok(isArr(p.aperti) && p.aperti.every(a => isObj(a) && isStr(a.cosa) && isStr(a.richiesta)), "punti aperti non validi");
+  // D09 – immagini: solo data URL JPEG/PNG/WebP in base64, con percorso img/… e dimensione ragionevole
+  if (p.immagini !== undefined && ok(isObj(p.immagini), "immagini non valide"))
+    for (const [k, v] of Object.entries(p.immagini))
+      ok(/^img\/[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp)$/.test(k) && isStr(v) && v.length <= MAX_IMG && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(v), `immagine ${String(k).slice(0, 60)}: non è un'immagine incorporata valida`);
+  // D04 – nessuno stato fuori da V/R/I/N in tutto il pacchetto
+  const giro = (x, dove) => {
+    if (isArr(x)) x.forEach((v, i) => giro(v, `${dove}[${i}]`));
+    else if (isObj(x)) for (const [k, v] of Object.entries(x)) { if (k === "immagini") continue; if (k === "st" && !isSt(v)) e.push(`${dove}.st: stato "${String(v).slice(0, 20)}" non ammesso`); else giro(v, `${dove}.${k}`); }
+  };
+  giro(p, "pacchetto");
+  return [...new Set(e)];
+}
+
+// Converte la data URL in immagine senza rete e verifica che si possa davvero aprire.
+async function immagineDa(dataUrl) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
+  if (!m) throw new Error("formato");
+  const bin = atob(m[2]), a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  const b = new Blob([a], { type: m[1] });
+  if (typeof createImageBitmap === "function") { const bm = await createImageBitmap(b); if (bm.close) bm.close(); }
+  return b;
+}
+function testoErrore(err) {
+  if (err && err.name === "QuotaExceededError") return "spazio esaurito nel telefono";
+  return (err && (err.message || err.name)) || "errore sconosciuto";
+}
+
+// ---------- Import dei pacchetti ----------
+// Restituisce { ok, id, avvisi } oppure { err }.
+async function importaTesto(txt, nome) {
+  let p;
+  try { p = JSON.parse(txt); } catch (_) { return { err: `${nome}: file non leggibile (JSON non valido)` }; }
+  const e = controlla(p);
+  if (e.length) return { err: `${nome}: ${e.slice(0, 10).join("; ")}${e.length > 10 ? ` (e altri ${e.length - 10} problemi)` : ""}` };
+  const vecchio = await DB.getViaggio(p.id);
+  if (vecchio && Number.isInteger(vecchio.revisione) && vecchio.revisione > p.revisione && !confirm(`Hai già la revisione ${vecchio.revisione} del treno ${p.intestazione.treno}. Sostituirla con la ${p.revisione}, più vecchia?`)) return { err: `${nome}: non importato (tenuta la revisione ${vecchio.revisione})` };
+  // D09 – tutte le immagini vengono decodificate prima di salvare: se una è rovinata il pacchetto non entra,
+  // così non resta in uso una vecchia pagina con lo stesso nome al posto di quella nuova.
+  const blobs = {};
+  for (const [path, dataUrl] of Object.entries(p.immagini || {})) {
+    try { blobs[path] = await immagineDa(dataUrl); }
+    catch (_) { return { err: `${nome}: pagina FL ${path} rovinata o non leggibile, pacchetto non importato` }; }
+  }
+  // R05 – pagine FL usate dalla scheda ma assenti dal pacchetto: riuso quelle già nel telefono, e lo dico.
+  const avvisi = [], usate = new Set(Object.values(p.condotta.FLPAG).flatMap(g => g.pag.map(x => x.img)));
+  let riusate = 0;
+  for (const path of usate) {
+    if (blobs[path]) continue;
+    let b = null; try { b = await DB.getImg(p.id, path); } catch (_) {}
+    if (b) riusate++; else avvisi.push(`pagina FL ${path} assente: la scheda la mostrerà come mancante`);
+  }
+  if (riusate) avvisi.push(`${riusate} pagine FL riusate dalla revisione già salvata: verifica che l'edizione del FL non sia cambiata`);
+  delete p.immagini;
+  p.importato = new Date().toISOString();
+  try { await DB.putViaggio(p, blobs); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
+  return { ok: true, id: p.id, avvisi: avvisi.map(a => `${p.intestazione.treno}: ${a}`) };
+}
+// D01 – ogni file ha il suo esito; un errore su un file non ferma gli altri.
+async function importaFiles(files) {
+  const esiti = [];
+  for (const f of files) {
+    const nome = f.name || "file";
+    let r;
+    try { r = await importaTesto(await f.text(), nome); } catch (err) { r = { err: `${nome}: errore imprevisto (${testoErrore(err)})` }; }
+    esiti.push({ nome, ...r });
+  }
+  await home();
+  const fatti = esiti.filter(x => x.ok), falliti = esiti.filter(x => x.err), avv = fatti.flatMap(x => x.avvisi || []);
+  if (falliti.length || avv.length)
+    openSheet(shHead("Importazione", `${fatti.length} importati · ${falliti.length} non importati`) +
+      falliti.map(x => fact("Non importato", esc(x.err), "", "N")).join("") +
+      fatti.map(x => fact("Importato", esc(x.nome), "", "V")).join("") +
+      avv.map(a => fact("Attenzione", esc(a), "", "I")).join(""));
+  else if (fatti.length) { toast(fatti.length === 1 ? "Viaggio importato" : `${fatti.length} viaggi importati`); if (fatti.length === 1) apri(fatti[0].id); }
+  return esiti;
+}
+
+// ---------- File arrivati con "Condividi" (D07) ----------
+// Il file ricevuto resta nella cache finché l'import non è riuscito; se fallisce si può riprovare o scartare.
+const CONDIVISI = ["adc-copilot-gps-condivisi"]; // solo la PWA GPS indipendente
+async function condivisi() {
+  const L = [];
+  if (!("caches" in window)) return L;
+  for (const nome of CONDIVISI) {
+    if (!(await caches.has(nome))) continue;
+    const c = await caches.open(nome);
+    for (const k of await c.keys()) L.push({ c, k, nome });
+  }
+  return L;
+}
+async function pulisciVecchiaCache() { /* Nessuna cache condivisa o legacy da eliminare. */ }
+async function importaCondivisi() {
+  history.replaceState(null, "", "./" + location.hash);
+  const L = await condivisi();
+  if (!L.length) return;
+  const files = [];
+  for (const x of L) { const r = await x.c.match(x.k); files.push(new File([await r.blob()], decodeURIComponent(x.k.url.split("/").pop()))); }
+  const esiti = await importaFiles(files);
+  for (let i = 0; i < L.length; i++) if (esiti[i] && esiti[i].ok) await L[i].c.delete(L[i].k);
+  await pulisciVecchiaCache();
+  await sospesi();
+}
+async function scartaCondivisi() {
+  if (!confirm("Scartare i file ricevuti con Condividi e non importati?")) return;
+  for (const x of await condivisi()) await x.c.delete(x.k);
+  await pulisciVecchiaCache(); await sospesi(); toast("File scartati");
+}
+async function sospesi() {
+  let n = 0; try { n = (await condivisi()).length; } catch (_) {}
+  $("#sospesi").hidden = !n;
+  $("#sospesi").innerHTML = n ? `<div class="alert">${n === 1 ? "1 file ricevuto" : n + " file ricevuti"} con Condividi non ${n === 1 ? "è stato importato" : "sono stati importati"}.<div class="btns left"><button class="studia" type="button" data-cond="riprova">Riprova</button><button class="studia alt" type="button" data-cond="scarta">Scarta</button></div></div>` : "";
+}
+
+// ---------- Home ----------
+// D01 – un viaggio salvato rovinato (o di una versione vecchia) non blocca la Home: si può esportare o eliminare.
+const valido = p => { try { return controlla(p).length === 0; } catch (_) { return false; } };
+const dataId = p => String(p && p.id || "").split("_")[1] || "";
+async function home() {
+  if (typeof GPS !== "undefined") GPS.close();
+  closeSheet(); Scheda.popClose();
+  for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
+  $("#viaggio").hidden = true; $("#home").hidden = false;
+  let V = [];
+  try { V = await DB.listViaggi(); } catch (err) { toast("Archivio non leggibile: " + testoErrore(err)); }
+  V.sort((a, b) => dataId(b).localeCompare(dataId(a)) || String(a && a.id).localeCompare(String(b && b.id)));
+  const buoni = V.filter(valido);
+  $("#viaggi").innerHTML = V.length ? V.map(p => {
+    const id = String(p && p.id || "");
+    if (!valido(p)) return `<div class="trip"><div class="item row-st bad"><span><b>Viaggio non leggibile</b><br><small>${esc(id || "senza id")} · danneggiato o salvato con regole vecchie: esportalo per Claude o eliminalo</small></span><button class="studia alt" type="button" data-exp="${esc(id)}">Esporta</button></div>
+      <button class="del" type="button" data-del="${esc(id)}" aria-label="Elimina viaggio non leggibile">Elimina</button></div>`;
+    const I = p.intestazione;
+    return `<div class="trip"><button class="item" type="button" data-open="${esc(id)}"><span><span class="tno">${esc(I.treno)}</span><br>${esc(I.percorso)}<br><small>${esc(I.data_viaggio)} · rev. ${esc(p.revisione)} · ${esc(p.comandi.map(c => c.replace("STUDIO LINEA ", "")).join(" + ").toLowerCase())}${p.aperti && p.aperti.length ? ` · ${p.aperti.length} da studiare` : ""}</small></span><small>apri ›</small></button>
+      <button class="del" type="button" data-del="${esc(id)}" aria-label="Elimina ${esc(I.treno)}">Elimina</button></div>`;
+  }).join("") : `<div class="empty">Nessun viaggio salvato. Quando Claude ti consegna il file <b>.adc.json</b> alla fine dello studio, scaricalo e toccalo con <b>Importa pacchetto</b>, oppure condividilo con questa app.</div>`;
+  const M = buoni.flatMap(p => (p.aperti || []).map(a => ({ ...a, treno: p.intestazione.treno, vid: p.id })));
+  $("#messaggi").innerHTML = M.length ? M.map(a => `<div class="item row-st"><span><b>${esc(a.treno)}</b> · ${esc(a.cosa)}<br><small>${esc(LAB_MOTIVO[a.motivo] || "da studiare")}</small></span><span class="btns">${a.motivo === "attesa_massa_treno" ? `<button class="studia alt" type="button" data-docfor="${esc(a.vid)}">Allega doc.</button>` : ""}<button class="studia" type="button" data-req="${esc(a.richiesta)}">Studia</button></span></div>`).join("")
+    : `<div class="note">Nessun punto aperto nei viaggi salvati. I messaggi completi di Claude restano nella chat del progetto.</div>`;
+  try { const e = await navigator.storage.estimate(); $("#storeInfo").textContent = `Spazio usato nel telefono: ${(e.usage / 1048576).toFixed(1)} MB.`; } catch (_) {}
+  await sospesi();
+}
+async function apri(id) {
+  const p = await DB.getViaggio(id);
+  if (!p) return toast("Viaggio non trovato");
+  const e = (() => { try { return controlla(p); } catch (err) { return [testoErrore(err)]; } })();
+  if (e.length) return openSheet(shHead("Viaggio non leggibile", id) + e.slice(0, 10).map(x => fact("Problema", esc(x), "", "N")).join("") +
+    `<div class="note">Esporta il file e chiedi a Claude di ripubblicare il pacchetto, oppure elimina il viaggio.</div><div class="btns left"><button class="studia alt" type="button" data-exp="${esc(id)}">Esporta</button><button class="studia" type="button" data-del="${esc(id)}">Elimina</button></div>`);
+  for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
+  const usate = new Set(Object.values(p.condotta.FLPAG).flatMap(g => g.pag.map(x => x.img)));
+  for (const path of usate) { try { const b = await DB.getImg(id, path); if (b) imgURLs[path] = URL.createObjectURL(b); } catch (_) {} }
+  try { Scheda.show(p, imgURLs); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
+  $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
+  if (typeof GPS !== "undefined") GPS.open(p);
+  if (location.hash !== "#v=" + id) history.pushState({ v: id }, "", "#v=" + id);
+}
+async function elimina(id) {
+  const p = await DB.getViaggio(id);
+  const I = p && isObj(p.intestazione) ? p.intestazione : null;
+  if (!confirm(I ? `Eliminare il viaggio ${I.treno} del ${I.data_viaggio} da questo telefono?` : `Eliminare il viaggio non leggibile ${id} da questo telefono?`)) return;
+  try { await DB.delViaggio(id); toast("Viaggio eliminato"); } catch (err) { toast("Eliminazione non riuscita: " + testoErrore(err)); }
+  home();
+}
+// Esporta il record salvato (senza le pagine FL) per farlo controllare o ripubblicare da Claude.
+async function esporta(id) {
+  const p = await DB.getViaggio(id);
+  if (!p) return toast("Viaggio non trovato");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 1)], { type: "application/json" }));
+  a.download = `${(id || "viaggio").replace(/[^0-9A-Za-z_-]/g, "_")}.adc.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+// ---------- Invio a Claude ----------
+const CHIUSURA = "Al termine consegnami il pacchetto viaggio .adc.json per la PWA (formato della scheda 16c).";
+async function copia(txt) { try { await navigator.clipboard.writeText(txt); return true; } catch (_) { return false; } }
+async function inviaClaude(testo, files = []) {
+  const copiato = await copia(testo);
+  const dati = { title: "ADC COPILOT", text: testo };
+  if (files.length) dati.files = files;
+  if (navigator.share && (!navigator.canShare || navigator.canShare(dati))) {
+    try { await navigator.share(dati); toast(copiato ? "Scegli Claude. Il comando è anche copiato: se non compare, incollalo" : "Scegli Claude dal menu Condividi"); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  const proj = await DB.getConf("progetto");
+  openSheet(shHead("Invia a Claude", copiato ? "Comando copiato negli appunti" : "Copia il testo") +
+    `<div class="reqbox">${esc(testo)}</div>` +
+    (files.length ? `<div class="note">Allega in chat anche: ${files.map(f => esc(f.name)).join(", ")}.</div>` : "") +
+    (/^https:\/\//i.test(proj || "") ? `<a class="btn primary" href="${esc(proj)}" target="_blank" rel="noopener">Apri il progetto in Claude</a>` : `<div class="note">Apri l'app Claude, entra nel progetto ADC COPILOT e incolla. Puoi salvare il link del progetto nelle Impostazioni.</div>`));
+}
+function inputs() {
+  return { scheda: [...$("#fScheda").files], traccia: $("#tTraccia").value.trim(), massa: $("#nMassa").value.trim(), fl: [...$("#fFL").files], doc: [...$("#fDocNuovo").files] };
+}
+// Documenti del treno (M18, BFC, M40 Tecnico…) per massa, freni a mano e staffe.
+const DOC_USO = "ricava massa rimorchiata, massa frenata a mano (freni a vite), % di carri carichi e massa assiale minima dei vuoti, poi fai il calcolo delle staffe (PE CTI 16/2017) e i controlli PGOS. La massa del treno va presa solo da questi documenti, mai dalla Prestazione della Scheda Treno: nel pacchetto metti pgos.massa_origine \"documenti\", in massa_fonte il documento e la riga usati e in massa_st lo stato della lettura. I documenti valgono solo per questo viaggio: eliminali dalle fonti con VIAGGIO TERMINATO.";
+function richiestaDoc(treno, files) {
+  return `STUDIA SOLO staffe di immobilizzazione e controlli PGOS – ${treno}\nTi allego i documenti del treno (${files.map(f => f.name).join(", ")}): ${DOC_USO}\nAl termine ripubblica il pacchetto viaggio .adc.json con la revisione aggiornata.`;
+}
+const docScelti = new WeakMap(); // riquadro .docbox → File[]
+function docScegli(inp) {
+  const box = inp.closest(".docbox"), files = [...inp.files];
+  docScelti.set(box, files);
+  const list = box.querySelector(".doclist"), send = box.querySelector("[data-docsend]");
+  list.hidden = send.hidden = !files.length;
+  list.textContent = files.length ? `Scelti: ${files.map(f => f.name).join(", ")}` : "";
+}
+function docInvia(t) {
+  const box = t.closest(".docbox"), files = docScelti.get(box) || [];
+  if (!files.length) return toast("Scegli prima i documenti del treno");
+  inviaClaude(richiestaDoc(box.querySelector(".fDoc").dataset.treno, files), files);
+}
+async function docPer(id) {
+  const p = await DB.getViaggio(id);
+  if (!p) return toast("Viaggio non trovato");
+  openSheet(shHead("Documenti del treno", `${p.intestazione.treno} · ${p.intestazione.data_viaggio}`) + Scheda.docBox(p.condotta.TRENO || `treno ${p.intestazione.treno} del ${p.intestazione.data_viaggio}`));
+}
+function comando(tipo) {
+  const x = inputs();
+  if (tipo === "crea") {
+    if (!x.scheda.length) return toast("Scegli prima il PDF della Scheda Treno");
+    return inviaClaude(`STUDIO LINEA CONDOTTA\nScheda Treno allegata. Crea anche la scheda treno interattiva. ${CHIUSURA}`, x.scheda);
+  }
+  if (tipo === "studiaTraccia") {
+    if (!x.traccia) { $("#dTraccia").open = true; $("#tTraccia").focus(); return toast("Incolla prima la traccia"); }
+    return inviaClaude(`STUDIO LINEA CONDOTTA con la traccia (fase 1: la Scheda Treno arriverà dopo).\n\nTRACCIA:\n${x.traccia}\n\n${CHIUSURA}`);
+  }
+  if (tipo === "formazione") {
+    if (!x.scheda.length && !x.traccia) return toast("Serve la Scheda Treno o la traccia");
+    const mt = Number(x.massa);
+    if (x.massa && !(Number.isFinite(mt) && mt > 0 && mt < 10000)) { $("#nMassa").focus(); return toast("Massa del treno non valida: scrivi le tonnellate, es. 1450"); }
+    const massa = x.massa ? `\nMassa del treno: ${mt} t (fornita da me: pgos.massa_origine "utente").` : x.doc.length ? "\nMassa del treno: ricavala dai documenti del treno allegati (mai dalla Prestazione della Scheda Treno)." : "\nMassa del treno non fornita: i controlli PGOS restano non eseguibili.";
+    const doc = x.doc.length ? `\nDocumenti del treno allegati (${x.doc.map(f => f.name).join(", ")}): ${DOC_USO}` : "";
+    const base = x.scheda.length ? "STUDIO LINEA FORMAZIONE\nScheda Treno allegata." : `STUDIO LINEA FORMAZIONE con la traccia.\n\nTRACCIA:\n${x.traccia}\n`;
+    return inviaClaude(`${base}${massa}${doc}\n${CHIUSURA}`, [...x.scheda, ...x.doc]);
+  }
+  if (tipo === "allegaFL") {
+    if (!x.fl.length) return toast("Scegli prima i PDF dei FL");
+    return inviaClaude(`Ti allego i FL mancanti per lo studio in corso (${x.fl.map(f => f.name).join(", ")}): inseriscili nell'archivio FL e prosegui lo studio. ${CHIUSURA}`, x.fl);
+  }
+}
+function studia(req) { inviaClaude(`${req}\nAl termine ripubblica il pacchetto viaggio .adc.json con la revisione aggiornata.`); }
+
+// ---------- Eventi ----------
+document.addEventListener("click", e => {
+  const t = e.target.closest("button"); if (!t) return;
+  const d = t.dataset;
+  if (d.gps && typeof GPS !== "undefined") return GPS.handle(d.gps);
+  if (d.cmd === "theme") return toggleTheme();
+  if (d.cmd === "home") return history.length > 1 && location.hash ? history.back() : home();
+  if (d.cmd) return comando(d.cmd);
+  if (d.open) return apri(d.open);
+  if (d.del) return elimina(d.del);
+  if (d.req) return studia(d.req);
+  if (d.docsend) return docInvia(t);
+  if (d.docfor) return docPer(d.docfor);
+  if (d.exp) return esporta(d.exp);
+  if (d.cond === "riprova") return importaCondivisi();
+  if (d.cond === "scarta") return scartaCondivisi();
+  if (d.agg) return aggiornaApp();
+  if (d.copy) { copia(d.copy).then(ok => { t.textContent = ok ? "Copiato" : "Copia"; if (!ok) toast("Copia non riuscita: tieni premuto sul numero"); }); return; }
+  if (Scheda.click(t)) return;
+  if (t.classList.contains("close")) return closeSheet();
+});
+$("#scrim").addEventListener("click", closeSheet);
+$("#popScrim").addEventListener("click", () => Scheda.popClose());
+document.addEventListener("keydown", e => { if (e.key === "Escape") { if (Scheda.popOpenVisible()) return Scheda.popClose(); closeSheet(); } });
+$("#fImport").addEventListener("change", e => { importaFiles([...e.target.files]); e.target.value = ""; });
+document.addEventListener("change", e => { if (e.target.classList && e.target.classList.contains("fDoc")) docScegli(e.target); });
+$("#uProj").addEventListener("change", e => {
+  const v = e.target.value.trim();
+  if (v && !/^https:\/\//i.test(v)) return toast("Il link deve iniziare con https://");
+  DB.setConf("progetto", v).then(() => toast("Link salvato"));
+});
+// Privacy/batteria: interrompi la geolocalizzazione in background o a schermo spento.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && typeof GPS !== "undefined") GPS.close("GPS sospeso: app non visibile. Per riprendere, premi GPS OFF · Attiva.");
+});
+addEventListener("online", net); addEventListener("offline", net);
+addEventListener("popstate", () => { const m = location.hash.match(/^#v=(.+)$/); m ? apri(decodeURIComponent(m[1])) : home(); });
+
+// ---------- Offline e aggiornamenti (R01, R02) ----------
+// La nuova versione si scarica intera in sottofondo e si attiva solo quando tocchi "Aggiorna":
+// niente pagine con file di versioni diverse. I viaggi salvati (IndexedDB) non vengono toccati.
+let swInAttesa = null;
+function statoOffline(t) { const el = $("#offInfo"); if (el) el.textContent = t; }
+function mostraAggiornamento(w) {
+  swInAttesa = w;
+  $("#agg").hidden = false;
+  $("#agg").innerHTML = `<div class="alert">Nuova versione dell'app pronta.<div class="btns left"><button class="studia" type="button" data-agg="1">Aggiorna ora</button></div></div>`;
+}
+function aggiornaApp() { if (swInAttesa) swInAttesa.postMessage("aggiorna"); }
+async function registraSW() {
+  if (!("serviceWorker" in navigator)) return statoOffline("Questo browser non permette l'uso offline.");
+  const giaControllata = !!navigator.serviceWorker.controller;
+  let ricaricata = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (giaControllata && !ricaricata) { ricaricata = true; location.reload(); } });
+  try {
+    const reg = await navigator.serviceWorker.register("sw.js");
+    if (reg.waiting && navigator.serviceWorker.controller) mostraAggiornamento(reg.waiting);
+    reg.addEventListener("updatefound", () => {
+      const w = reg.installing;
+      if (w) w.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) mostraAggiornamento(w); });
+    });
+    statoOffline("Uso offline: in preparazione (serve la rete al primo avvio)…");
+    await navigator.serviceWorker.ready;
+    statoOffline("Uso offline: app salvata nel telefono. Senza rete i caratteri possono apparire diversi.");
+  } catch (_) { statoOffline("Uso offline NON disponibile: registrazione non riuscita. Riapri l'app con la rete."); }
+}
+
+// ---------- Avvio ----------
+(async function avvio() {
+  $("#ver").textContent = VERSION; net();
+  try { applyTheme(await DB.getConf("tema")); $("#uProj").value = (await DB.getConf("progetto")) || ""; } catch (_) {}
+  registraSW();
+  try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (_) {}
+  await home();
+  if (new URLSearchParams(location.search).has("condivisi")) await importaCondivisi();
+  const m = location.hash.match(/^#v=(.+)$/); if (m) apri(decodeURIComponent(m[1]));
+})();

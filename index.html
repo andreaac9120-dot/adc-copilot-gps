@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ADC COPILOT</title>
+<meta name="description" content="Schede treno interattive consultabili offline">
+<meta name="theme-color" content="#05080b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#dde3e9" media="(prefers-color-scheme: light)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== HOME ===== -->
+  <main id="home">
+    <header class="head">
+      <div class="top-row">
+        <div><div class="trainno">ADC COPILOT</div><div class="route">Schede treno offline</div></div>
+        <div class="tools">
+          <span class="net" id="net" title="Stato della connessione"></span>
+          <button class="chip" type="button" data-cmd="theme" aria-label="Cambia tema giorno/notte">☀️/🌙</button>
+        </div>
+      </div>
+    </header>
+
+    <div id="agg" hidden></div>
+
+    <section class="card" aria-labelledby="hViaggi">
+      <div class="card-head"><h2 id="hViaggi">Viaggi salvati</h2>
+        <label class="btn primary file-btn">Importa pacchetto<input type="file" id="fImport" accept=".json,.adc.json,application/json" multiple hidden></label>
+      </div>
+      <div id="sospesi" hidden></div>
+      <div id="viaggi" class="menu"></div>
+      <p class="note" id="storeInfo"></p>
+    </section>
+
+    <section class="card" aria-labelledby="hMsg">
+      <div class="card-head"><h2 id="hMsg">Da Claude: da studiare e mancanti</h2></div>
+      <div id="messaggi" class="menu"></div>
+    </section>
+
+    <section class="card" aria-labelledby="hNuovo">
+      <div class="card-head"><h2 id="hNuovo">Nuovo studio</h2></div>
+      <p class="note">Lo studio lo fa Claude nel progetto ADC COPILOT (serve la rete). Qui prepari il comando con i file: il tasto lo invia all'app Claude tramite Condividi. Al termine Claude ti dà il pacchetto <b>.adc.json</b> da importare qui sopra.</p>
+
+      <label class="field"><span>Scheda Treno (PDF Railmobile)</span>
+        <input type="file" id="fScheda" accept="application/pdf,.pdf,.json" multiple></label>
+      <details class="field" id="dTraccia"><summary>Oppure incolla la traccia (Softrail Info treno)</summary>
+        <textarea id="tTraccia" rows="6" placeholder="Incolla qui la notifica con le tratte tra località…"></textarea></details>
+      <label class="field"><span>Massa del treno in t (solo per Formazione, facoltativa)</span>
+        <input type="number" id="nMassa" inputmode="numeric" min="0" step="1" placeholder="es. 1450"></label>
+      <label class="field"><span>Documenti del treno per le staffe (M18, BFC, M40 Tecnico: PDF o foto, facoltativi)</span>
+        <input type="file" id="fDocNuovo" accept="application/pdf,.pdf,image/*" multiple></label>
+
+      <div class="actions">
+        <button class="btn primary" type="button" data-cmd="crea">Crea scheda interattiva<small>Studio linea condotta con la Scheda Treno</small></button>
+        <button class="btn" type="button" data-cmd="studiaTraccia">Studia linea<small>Studio linea condotta con la traccia (fase 1)</small></button>
+        <button class="btn" type="button" data-cmd="formazione">Studio linea formazione<small>Con Scheda Treno o traccia, più i documenti del treno se li hai</small></button>
+      </div>
+
+      <label class="field"><span>FL mancanti chiesti da Claude</span>
+        <input type="file" id="fFL" accept="application/pdf,.pdf" multiple></label>
+      <div class="actions"><button class="btn" type="button" data-cmd="allegaFL">Allega FL a Claude<small>Invia i PDF scelti con la richiesta di proseguire</small></button></div>
+    </section>
+
+    <section class="card">
+      <details><summary class="sum">Impostazioni</summary>
+        <label class="field"><span>Link del progetto Claude (si apre dopo aver copiato un comando)</span>
+          <input type="url" id="uProj" placeholder="https://claude.ai/project/…"></label>
+        <p class="note">Versione app <span id="ver"></span>. Formato pacchetto v1 (scheda 16c del progetto). I pacchetti restano solo in questo telefono.</p>
+        <p class="note" id="offInfo"></p>
+      </details>
+    </section>
+    <footer>Strumento di consultazione: fanno fede la Scheda Treno ufficiale, le prescrizioni ricevute e i documenti in vigore.</footer>
+  </main>
+
+  <!-- ===== VIAGGIO ===== -->
+  <main id="viaggio" hidden>
+    <header class="head">
+      <div class="top-row">
+        <button class="back" type="button" data-cmd="home">‹ Viaggi</button>
+        <div class="tools"><span class="net" id="net2"></span>
+          <button class="chip" type="button" data-cmd="theme" aria-label="Cambia tema giorno/notte">☀️/🌙</button></div>
+      </div>
+      <div class="top-row">
+        <div><div class="trainno" id="vTreno"></div><div class="route" id="vPercorso"></div></div>
+        <div id="vLoco" class="tools"></div>
+      </div>
+      <div class="meta" id="vMeta"></div>
+      <div id="vAvvisi"></div>
+      <div class="legend"><span><span class="dot d-V"></span>verificato</span><span><span class="dot d-R"></span>ricostruito</span><span><span class="dot d-I"></span>incerto</span><span><span class="dot d-N"></span>da studiare</span></div>
+      <div class="note" id="vNota"></div>
+    </header>
+    <!-- GPS disattivato alla prima apertura; nessun tracciamento in background. -->
+    <section class="gps-panel" aria-label="Avanzamento assistito della scheda treno">
+      <div class="gps-title"><strong>📍 Posizione nella scheda</strong><button id="gpsToggle" type="button" class="btn gps-toggle" data-gps="toggle" aria-pressed="false">GPS OFF</button></div>
+      <p id="gpsStatus" class="gps-status" role="status" aria-live="polite">GPS spento. Usa le frecce per seguire la scheda manualmente.</p>
+      <div class="gps-controls"><button type="button" class="btn" data-gps="prev" aria-label="Riga precedente">◀ Indietro</button><button type="button" class="btn" data-gps="center">Centra</button><button type="button" class="btn" data-gps="next" aria-label="Riga successiva">Avanti ▶</button></div>
+      <button type="button" class="gps-request" data-gps="request">Richiedi coordinate GPS verificate a Claude</button>
+      <p class="gps-note">Indicazione orientativa, non valida per condotta, segnali, frenatura o prescrizioni. Il GPS può mancare in galleria o con schermo spento.</p>
+    </section>
+    <section class="sheet-tbl" aria-label="Scheda treno">
+      <div class="colhead"><span>Fren.</span><span>Vel.</span><span style="text-align:right">Km</span><span>Località</span><span style="text-align:right">Dir.</span></div>
+      <div id="rows"></div>
+    </section>
+    <footer id="vPiede"></footer>
+  </main>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="toast" id="toast" hidden role="status"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" hidden><div class="sheet-in" id="sheetIn"></div></div>
+<div class="pop-scrim" id="popScrim" hidden></div>
+<div class="pop" id="pop" role="dialog" aria-modal="true" aria-labelledby="popTitle" hidden>
+  <div class="pop-head">
+    <div class="pop-row"><div><div class="pop-title" id="popTitle"></div><div class="pop-src" id="popSrc"></div></div><button class="close" type="button" id="popClose">Chiudi</button></div>
+    <div class="pop-tools"><span id="popTabs" class="tabs"></span><span style="flex:1"></span><button class="zbtn" type="button" id="zOut" aria-label="Riduci">−</button><span class="zval" id="zVal">100%</span><button class="zbtn" type="button" id="zIn" aria-label="Ingrandisci">+</button></div>
+    <div class="pop-note" id="popNote"></div>
+  </div>
+  <div class="pop-body" id="popBody"><img id="popImg" alt=""><div id="popMiss" class="pop-miss" hidden></div></div>
+</div>
+<script src="db.js"></script>
+<script src="scheda.js"></script>
+<script src="gps.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
