@@ -59,24 +59,12 @@
         <input type="file" id="fDocNuovo" accept="application/pdf,.pdf,image/*" multiple></label>
 
       <div class="actions">
-        <button class="btn primary" type="button" data-cmd="crea">Crea scheda interattiva<small>Studio linea condotta con la Scheda Treno</small></button>
-        <button class="btn" type="button" data-cmd="studiaTraccia">Studia linea<small>Studio linea condotta con la traccia (fase 1)</small></button>
+        <button class="btn primary" type="button" data-cmd="condotta">Studio linea condotta<small>Con la Scheda Treno o la traccia</small></button>
         <button class="btn" type="button" data-cmd="formazione">Studio linea formazione<small>Con Scheda Treno o traccia, più i documenti del treno se li hai</small></button>
       </div>
-
-      <label class="field"><span>FL mancanti chiesti da Claude</span>
-        <input type="file" id="fFL" accept="application/pdf,.pdf" multiple></label>
-      <div class="actions"><button class="btn" type="button" data-cmd="allegaFL">Allega FL a Claude<small>Invia i PDF scelti con la richiesta di proseguire</small></button></div>
     </section>
 
-    <section class="card">
-      <details><summary class="sum">Impostazioni</summary>
-        <label class="field"><span>Link del progetto Claude (si apre dopo aver copiato un comando)</span>
-          <input type="url" id="uProj" placeholder="https://claude.ai/project/…"></label>
-        <p class="note">Versione app <span id="ver"></span>. Formato pacchetto v1 (scheda 16c del progetto). I pacchetti restano solo in questo telefono.</p>
-        <p class="note" id="offInfo"></p>
-      </details>
-    </section>
+    <p class="note">Versione app <span id="ver"></span> · pacchetto unico v1 (scheda 16c). I viaggi restano solo in questo telefono. <span id="offInfo"></span></p>
     <footer>Strumento di consultazione: fanno fede la Scheda Treno ufficiale, le prescrizioni ricevute e i documenti in vigore.</footer>
   </main>
 
@@ -102,7 +90,6 @@
       <div class="gps-title"><strong>📍 Posizione nella scheda</strong><button id="gpsToggle" type="button" class="btn gps-toggle" data-gps="toggle" aria-pressed="false">GPS OFF</button></div>
       <p id="gpsStatus" class="gps-status" role="status" aria-live="polite">GPS spento. Usa le frecce per seguire la scheda manualmente.</p>
       <div class="gps-controls"><button type="button" class="btn" data-gps="prev" aria-label="Riga precedente">◀ Indietro</button><button type="button" class="btn" data-gps="center">Centra</button><button type="button" class="btn" data-gps="next" aria-label="Riga successiva">Avanti ▶</button></div>
-      <button type="button" class="gps-request" data-gps="request">Richiedi coordinate GPS verificate a Claude</button>
       <p class="gps-note">Indicazione orientativa, non valida per condotta, segnali, frenatura o prescrizioni. Il GPS può mancare in galleria o con schermo spento.</p>
     </section>
     <section class="sheet-tbl" aria-label="Scheda treno">

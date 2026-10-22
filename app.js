@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.7";
+const VERSION = "1.0.9";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile" };
 let imgURLs = {};
 
@@ -239,7 +239,7 @@ async function importaFiles(files) {
 
 // ---------- File arrivati con "Condividi" (D07) ----------
 // Il file ricevuto resta nella cache finché l'import non è riuscito; se fallisce si può riprovare o scartare.
-const CONDIVISI = ["adc-copilot-gps-condivisi"]; // solo la PWA GPS indipendente
+const CONDIVISI = ["adc-copilot-gps-condivisi"]; // nome tecnico invariato per non perdere i file ricevuti
 async function condivisi() {
   const L = [];
   if (!("caches" in window)) return L;
@@ -333,7 +333,8 @@ async function esporta(id) {
 }
 
 // ---------- Invio a Claude ----------
-const CHIUSURA = 'Per ogni rallentamento nel tratto studiato inserisci una riga condotta.R con t="m3" e m3={"velocita":"...","inizio_km":"...","lunghezza_m":"...","binario":"S, D oppure SD","note":["..."],"modulo":"..."}. Usa "SD" se il rallentamento interessa entrambi i binari: nella scheda sarà mostrato come S/D. Conserva il cippo di inizio come testo, anche se spostabile. Lascia gli M3 fuori tratto solo in condotta.PRESC. Usa solo dati verificati nel M3; per un campo non verificabile usa una stringa vuota e non inventarlo. Metti in note tutte le indicazioni aggiuntive del rallentamento. Al termine consegnami il pacchetto viaggio .adc.json per la PWA (formato della scheda 16c).';
+// Pacchetto unico dal 22/10/2026: le regole complete (GEO, righe M3 compatte, controllo) sono nella scheda 16c del progetto.
+const CHIUSURA = 'Al termine consegnami il pacchetto unico .adc.json secondo la scheda 16c (GEO dal registro GPS_17, righe M3 compatte, controllo con GPS_16e).';
 async function copia(txt) { try { await navigator.clipboard.writeText(txt); return true; } catch (_) { return false; } }
 async function inviaClaude(testo, files = []) {
   const copiato = await copia(testo);
@@ -343,14 +344,13 @@ async function inviaClaude(testo, files = []) {
     try { await navigator.share(dati); toast(copiato ? "Scegli Claude. Il comando è anche copiato: se non compare, incollalo" : "Scegli Claude dal menu Condividi"); return; }
     catch (e) { if (e.name === "AbortError") return; }
   }
-  const proj = await DB.getConf("progetto");
   openSheet(shHead("Invia a Claude", copiato ? "Comando copiato negli appunti" : "Copia il testo") +
     `<div class="reqbox">${esc(testo)}</div>` +
     (files.length ? `<div class="note">Allega in chat anche: ${files.map(f => esc(f.name)).join(", ")}.</div>` : "") +
-    (/^https:\/\//i.test(proj || "") ? `<a class="btn primary" href="${esc(proj)}" target="_blank" rel="noopener">Apri il progetto in Claude</a>` : `<div class="note">Apri l'app Claude, entra nel progetto ADC COPILOT e incolla. Puoi salvare il link del progetto nelle Impostazioni.</div>`));
+    `<div class="note">Apri l'app Claude, entra nel progetto ADC COPILOT e incolla.</div>`);
 }
 function inputs() {
-  return { scheda: [...$("#fScheda").files], traccia: $("#tTraccia").value.trim(), massa: $("#nMassa").value.trim(), fl: [...$("#fFL").files], doc: [...$("#fDocNuovo").files] };
+  return { scheda: [...$("#fScheda").files], traccia: $("#tTraccia").value.trim(), massa: $("#nMassa").value.trim(), doc: [...$("#fDocNuovo").files] };
 }
 // Documenti del treno (M18, BFC, M40 Tecnico…) per massa, freni a mano e staffe.
 const DOC_USO = "ricava massa rimorchiata, massa frenata a mano (freni a vite), % di carri carichi e massa assiale minima dei vuoti, poi fai il calcolo delle staffe (PE CTI 16/2017) e i controlli PGOS. La massa del treno va presa solo da questi documenti, mai dalla Prestazione della Scheda Treno: nel pacchetto metti pgos.massa_origine \"documenti\", in massa_fonte il documento e la riga usati e in massa_st lo stato della lettura. I documenti valgono solo per questo viaggio: eliminali dalle fonti con VIAGGIO TERMINATO.";
@@ -377,13 +377,11 @@ async function docPer(id) {
 }
 function comando(tipo) {
   const x = inputs();
-  if (tipo === "crea") {
-    if (!x.scheda.length) return toast("Scegli prima il PDF della Scheda Treno");
-    return inviaClaude(`STUDIO LINEA CONDOTTA\nScheda Treno allegata. Crea anche la scheda treno interattiva. ${CHIUSURA}`, x.scheda);
-  }
-  if (tipo === "studiaTraccia") {
-    if (!x.traccia) { $("#dTraccia").open = true; $("#tTraccia").focus(); return toast("Incolla prima la traccia"); }
-    return inviaClaude(`STUDIO LINEA CONDOTTA con la traccia (fase 1: la Scheda Treno arriverà dopo).\n\nTRACCIA:\n${x.traccia}\n\n${CHIUSURA}`);
+  if (tipo === "condotta") {
+    if (x.scheda.length) return inviaClaude(`STUDIO LINEA CONDOTTA\nScheda Treno allegata.\n${CHIUSURA}`, x.scheda);
+    if (x.traccia) return inviaClaude(`STUDIO LINEA CONDOTTA con la traccia (la Scheda Treno arriverà dopo).\n\nTRACCIA:\n${x.traccia}\n\n${CHIUSURA}`);
+    $("#dTraccia").open = true; $("#tTraccia").focus();
+    return toast("Scegli la Scheda Treno o incolla la traccia");
   }
   if (tipo === "formazione") {
     if (!x.scheda.length && !x.traccia) return toast("Serve la Scheda Treno o la traccia");
@@ -393,10 +391,6 @@ function comando(tipo) {
     const doc = x.doc.length ? `\nDocumenti del treno allegati (${x.doc.map(f => f.name).join(", ")}): ${DOC_USO}` : "";
     const base = x.scheda.length ? "STUDIO LINEA FORMAZIONE\nScheda Treno allegata." : `STUDIO LINEA FORMAZIONE con la traccia.\n\nTRACCIA:\n${x.traccia}\n`;
     return inviaClaude(`${base}${massa}${doc}\n${CHIUSURA}`, [...x.scheda, ...x.doc]);
-  }
-  if (tipo === "allegaFL") {
-    if (!x.fl.length) return toast("Scegli prima i PDF dei FL");
-    return inviaClaude(`Ti allego i FL mancanti per lo studio in corso (${x.fl.map(f => f.name).join(", ")}): inseriscili nell'archivio FL e prosegui lo studio. ${CHIUSURA}`, x.fl);
   }
 }
 function studia(req) { inviaClaude(`${req}\nAl termine ripubblica il pacchetto viaggio .adc.json con la revisione aggiornata.`); }
@@ -427,11 +421,6 @@ $("#popScrim").addEventListener("click", () => Scheda.popClose());
 document.addEventListener("keydown", e => { if (e.key === "Escape") { if (Scheda.popOpenVisible()) return Scheda.popClose(); closeSheet(); } });
 $("#fImport").addEventListener("change", e => { importaFiles([...e.target.files]); e.target.value = ""; });
 document.addEventListener("change", e => { if (e.target.classList && e.target.classList.contains("fDoc")) docScegli(e.target); });
-$("#uProj").addEventListener("change", e => {
-  const v = e.target.value.trim();
-  if (v && !/^https:\/\//i.test(v)) return toast("Il link deve iniziare con https://");
-  DB.setConf("progetto", v).then(() => toast("Link salvato"));
-});
 // Privacy/batteria: interrompi la geolocalizzazione in background o a schermo spento.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && typeof GPS !== "undefined") GPS.close("GPS sospeso: app non visibile. Per riprendere, premi GPS OFF · Attiva.");
@@ -471,7 +460,7 @@ async function registraSW() {
 // ---------- Avvio ----------
 (async function avvio() {
   $("#ver").textContent = VERSION; net();
-  try { applyTheme(await DB.getConf("tema")); $("#uProj").value = (await DB.getConf("progetto")) || ""; } catch (_) {}
+  try { applyTheme(await DB.getConf("tema")); } catch (_) {}
   registraSW();
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (_) {}
   await home();

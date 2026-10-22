@@ -3,12 +3,12 @@
 // Ogni versione scarica la shell completa in una cache nuova e la attiva solo su conferma dell'utente (R01).
 // A ogni rilascio cambia VER: è ciò che fa vedere al telefono che c'è una versione nuova.
 const NS = "adc-copilot-gps-";
-const VER = NS + "shell-1.0.7";
+const VER = NS + "shell-1.0.9";
 const FONT = NS + "font";
 const CONDIVISI = NS + "condivisi";
 const SHELL = ["./", "index.html", "style.css", "db.js", "scheda.js", "gps.js", "app.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png"];
-// Installazione indipendente: nessuna cache legacy della versione stabile viene cancellata.
-const VECCHIA = k => false; // Repository indipendente: non elimina mai cache della PWA stabile.
+// Non cancella cache di altre app sullo stesso dominio (es. la vecchia 1.0.2, se ancora installata).
+const VECCHIA = k => false;
 
 self.addEventListener("install", e => {
   // addAll è tutto o niente: se un file non arriva, la versione nuova non si installa e resta quella vecchia.

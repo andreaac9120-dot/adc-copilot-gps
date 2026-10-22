@@ -113,11 +113,6 @@ const GPS = (() => {
     catch (_) { close(); stato("Impossibile avviare il GPS. Riprova o usa le frecce."); }
   }
   function handle(cmd) {
-    if (cmd === "request") {
-      if (!P) return;
-      if (typeof studia === "function") studia(`STUDIA SOLO coordinate geografiche WGS84 delle località di servizio – ${P.condotta.TRENO}. Associa ogni coordinata a un id specifico delle righe condotta.R (occorrenza), verifica la località e il percorso su una fonte cartografica affidabile e identificabile, trascrivi lat/lon numerici, src e st=V in condotta.GEO. Non inventare né interpolare coordinate dalla progressiva chilometrica, da omonimie o dal solo nome. Se non verificabile, ometti il punto. Non modificare dati tecnici non richiesti, conserva il formato v1 e controlla il pacchetto con 16d/16e.`);
-      return;
-    }
     if (cmd === "toggle") { toggle(); return; }
     if (cmd === "center") {
       if (indice === null) { stato("Posizione non ancora individuata: attiva il GPS o usa le frecce."); return; }

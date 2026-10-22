@@ -222,4 +222,3 @@ details.docmore summary { cursor: pointer; font-weight: 700; color: var(--line);
 #rows .gps-current { outline: 3px solid var(--accent); outline-offset: -3px; border-left: 6px solid var(--accent); background: var(--accent-soft) !important; position: relative; }
 #rows .gps-current::before { content: "▶"; color: var(--accent); position: absolute; left: 0; top: 50%; transform: translateY(-50%); font-size: 0.7rem; }
 
-.gps-request { justify-self: start; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 4px 0; color: var(--line); font: 700 0.85rem var(--f-body); cursor: pointer; }

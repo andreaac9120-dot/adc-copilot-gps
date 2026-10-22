@@ -1,7 +1,7 @@
 {
-  "name": "ADC COPILOT GPS – Sperimentale",
-  "short_name": "ADC GPS",
-  "description": "Versione sperimentale con avanzamento GPS assistito; indipendente da ADC COPILOT stabile.",
+  "name": "ADC COPILOT",
+  "short_name": "ADC COPILOT",
+  "description": "Schede treno offline con avanzamento GPS assistito. Versione unica di ADC COPILOT.",
   "lang": "it",
   "id": "./gps-pwa",
   "start_url": "./",
