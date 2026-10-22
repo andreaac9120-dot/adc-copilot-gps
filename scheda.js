@@ -40,6 +40,7 @@ const Scheda = (() => {
     let h = "", lastSeg = null;
     R.forEach((r, i) => {
       if (r.t === "loc" && r.s && r.s !== lastSeg && !r.end && SEG[r.s]) { h += `<div class="row seg">${esc(SEG[r.s].fl)} · ${esc(SEG[r.s].nome)}</div>`; lastSeg = r.s; }
+      if (r.t === "m3" && r.m3) { h += m3Row(r, i); return; }
       let name = esc(r.n);
       if (r.t === "loc") name = `<button type="button" data-i="${i}" aria-label="Apri ${esc(r.n)}">${esc(r.n)}</button>`;
       if (r.t === "m3" && PRESC) name = `<button type="button" data-presc="1">${esc(r.n)}</button>`;
@@ -50,6 +51,20 @@ const Scheda = (() => {
       h += `<div class="row ${r.t}" data-row="${i}"><span class="grado">${esc(r.g || "")}</span><span class="vel">${esc(r.v || "")}</span><span class="km">${km}</span><span class="name">${name}</span><span class="dircell">${ind}${aff}</span></div>`;
     });
     $("#rows").innerHTML = h;
+  }
+
+  function m3Row(r, i) {
+    const d = r.m3;
+    const binario = d.binario === "SD" || d.binario === "S/D" ? "S/D" : d.binario;
+    const noteHtml = d.note.length ? d.note.map(n => `<p>${esc(n)}</p>`).join("") : `<p>Nessuna nota nel pacchetto.</p>`;
+    const modulo = d.modulo ? `<p class="m3-modulo">${esc(d.modulo)}</p>` : "";
+    return `<div class="row m3 m3-compact" data-row="${i}">
+      <span class="grado">M3</span><span class="vel" aria-label="Velocità massima">${d.velocita ? `${esc(d.velocita)}<small> km/h</small>` : "—"}</span>
+      <span class="km" aria-label="Chilometro iniziale">${d.inizio_km ? `<small>km</small>${esc(d.inizio_km)}` : "—"}</span>
+      <span class="name">${d.lunghezza_m ? `${esc(d.lunghezza_m)} m` : "Lunghezza —"}</span>
+      <span class="dircell"><span class="m3-side" aria-label="${binario === "S/D" ? "Binari sinistro e destro" : binario === "S" ? "Binario sinistro" : binario === "D" ? "Binario destro" : "Binario non indicato"}">${binario || "?"}</span><button class="m3-toggle" type="button" data-m3="${i}" aria-label="Note del rallentamento" aria-expanded="false" aria-controls="m3-note-${i}">▲</button></span>
+      <div class="m3-notes" id="m3-note-${i}" hidden>${modulo}${noteHtml}</div>
+    </div>`;
   }
 
   function marcaRiga(i, centro = false) {
@@ -271,6 +286,11 @@ const Scheda = (() => {
   // Ritorna true se il tocco riguarda la scheda.
   function click(t) {
     const d = t.dataset;
+    if (d.m3 !== undefined) {
+      const notes = $("#m3-note-" + d.m3);
+      if (notes) { notes.hidden = !notes.hidden; t.setAttribute("aria-expanded", String(!notes.hidden)); }
+      return true;
+    }
     if (d.pg) return popOpen(d.pg, +d.i), true;
     if (d.a) return affiancate(+d.a, false), true;
     if (d.sig) { const [a, b] = d.sig.split(":"); return sigle(+a, +b), true; }

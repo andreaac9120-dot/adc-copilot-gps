@@ -1,4 +1,4 @@
-// GPS v1.0.3: solo consultazione, fonte geografica verificata e consenso esplicito.
+// GPS v1.0.4: solo consultazione, fonte geografica verificata e consenso esplicito.
 // Nessuna posizione viene registrata su IndexedDB, log, server o cache.
 const GPS = (() => {
   let P = null, rows = [], localita = [], enabled = false, watchId = null;
@@ -86,7 +86,8 @@ const GPS = (() => {
       stato(`GPS: possibile ${best.n} (${Math.round(best.d)} m, ±${Math.round(acc)} m). In attesa di conferma.`);
       return;
     }
-    segna(best.i, true, `vicino a ${best.n} · distanza indicativa ${Math.round(best.d)} m · precisione ±${Math.round(acc)} m`);
+    // Centra solo al passaggio a una nuova riga: i fix successivi non interrompono lo scorrimento manuale.
+    if (best.i !== indice) segna(best.i, true, `vicino a ${best.n} · distanza indicativa ${Math.round(best.d)} m · precisione ±${Math.round(acc)} m`);
   }
   function errore(e) {
     if (!enabled) return;

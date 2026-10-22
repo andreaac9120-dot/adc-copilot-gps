@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.3";
+const VERSION = "1.0.7";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile" };
 let imgURLs = {};
 
@@ -89,7 +89,17 @@ function controlla(p) {
         ids.add(r.id);
       }
     }
-    if (r.t === "m3") ok(c.PRESC, `${n} (${r.n}): riga prescrizioni senza il blocco delle prescrizioni`); // D10
+    if (r.t === "m3") {
+      ok(c.PRESC, `${n} (${r.n}): riga prescrizioni senza il blocco delle prescrizioni`); // D10
+      if (r.m3 !== undefined) ok(isObj(r.m3) &&
+        ["velocita", "inizio_km", "lunghezza_m"].every(k => isStr(r.m3[k])) &&
+        ["velocita", "lunghezza_m"].every(k => !r.m3[k] || /^\d+$/.test(r.m3[k])) &&
+        ["S", "D", "SD", "S/D", ""].includes(r.m3.binario) &&
+        isArr(r.m3.note) && r.m3.note.every(isStr) &&
+        (r.m3.modulo === undefined || isStr(r.m3.modulo)) &&
+        (r.v === undefined || r.v === r.m3.velocita),
+        `${n} (${r.n}): dati M3 non validi`);
+    } else if (r.m3 !== undefined) ok(false, `${n} (${r.n}): dati M3 su una riga non M3`);
   });
   ok(c.R[c.R.length - 1].end === true, "l'ultima riga del percorso non è segnata come arrivo");
 
@@ -323,7 +333,7 @@ async function esporta(id) {
 }
 
 // ---------- Invio a Claude ----------
-const CHIUSURA = "Al termine consegnami il pacchetto viaggio .adc.json per la PWA (formato della scheda 16c).";
+const CHIUSURA = 'Per ogni rallentamento nel tratto studiato inserisci una riga condotta.R con t="m3" e m3={"velocita":"...","inizio_km":"...","lunghezza_m":"...","binario":"S, D oppure SD","note":["..."],"modulo":"..."}. Usa "SD" se il rallentamento interessa entrambi i binari: nella scheda sarà mostrato come S/D. Conserva il cippo di inizio come testo, anche se spostabile. Lascia gli M3 fuori tratto solo in condotta.PRESC. Usa solo dati verificati nel M3; per un campo non verificabile usa una stringa vuota e non inventarlo. Metti in note tutte le indicazioni aggiuntive del rallentamento. Al termine consegnami il pacchetto viaggio .adc.json per la PWA (formato della scheda 16c).';
 async function copia(txt) { try { await navigator.clipboard.writeText(txt); return true; } catch (_) { return false; } }
 async function inviaClaude(testo, files = []) {
   const copiato = await copia(testo);
