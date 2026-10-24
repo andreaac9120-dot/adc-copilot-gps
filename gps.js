@@ -3,6 +3,7 @@
 const GPS = (() => {
   let P = null, rows = [], localita = [], enabled = false, watchId = null;
   let indice = null, pending = null, pendingCount = 0;
+  let watchGeneration = 0;
   const $g = s => document.querySelector(s);
   const km = 6371000;
   const deg = Math.PI / 180;
@@ -33,6 +34,7 @@ const GPS = (() => {
     stato(`${enabled ? "GPS attivo" : "Manuale"}: ${descrizione(indice)}${extra ? " · " + extra : ""}`);
   }
   function close(messaggio = "") {
+    watchGeneration++;
     if (watchId !== null && navigator.geolocation) {
       try { navigator.geolocation.clearWatch(watchId); } catch (_) {}
     }
@@ -108,9 +110,30 @@ const GPS = (() => {
     }
     enabled = true; pulsante(); pending = null; pendingCount = 0;
     stato("GPS attivo: attendo il consenso e una posizione affidabile…");
-    try { watchId = navigator.geolocation.watchPosition(fix, errore,
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }); }
+    startWatch();
+  }
+  function startWatch() {
+    const generation = ++watchGeneration;
+    if (watchId !== null) {
+      try { navigator.geolocation.clearWatch(watchId); } catch (_) {}
+      watchId = null;
+    }
+    pending = null; pendingCount = 0;
+    try { watchId = navigator.geolocation.watchPosition(
+      pos => { if (generation === watchGeneration) fix(pos); },
+      e => { if (generation === watchGeneration) errore(e); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }); }
     catch (_) { close(); stato("Impossibile avviare il GPS. Riprova o usa le frecce."); }
+  }
+  function visibilityChanged() {
+    if (!enabled) return;
+    pending = null; pendingCount = 0;
+    if (document.hidden) {
+      stato("GPS richiesto anche in background. Il sistema può sospendere la posizione; ripresa automatica al rientro.");
+      return;
+    }
+    stato("GPS attivo: riacquisizione della posizione dopo il ritorno nell’app…");
+    startWatch();
   }
   function handle(cmd) {
     if (cmd === "toggle") { toggle(); return; }
@@ -123,5 +146,5 @@ const GPS = (() => {
       segna(indice === null ? 0 : indice + (cmd === "next" ? 1 : -1), true, "GPS spento; avanzamento manuale");
     }
   }
-  return { open, close, handle, fix, distanza };
+  return { open, close, handle, fix, distanza, visibilityChanged };
 })();
