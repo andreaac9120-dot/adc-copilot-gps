@@ -85,12 +85,12 @@
       <div class="legend"><span><span class="dot d-V"></span>verificato</span><span><span class="dot d-R"></span>ricostruito</span><span><span class="dot d-I"></span>incerto</span><span><span class="dot d-N"></span>da studiare</span></div>
       <div class="note" id="vNota"></div>
     </header>
-    <!-- GPS disattivato alla prima apertura; nessun tracciamento in background. -->
+    <!-- GPS su consenso esplicito; il background non annulla la scelta. -->
     <section class="gps-panel" aria-label="Avanzamento assistito della scheda treno">
       <div class="gps-title"><strong>📍 Posizione nella scheda</strong><button id="gpsToggle" type="button" class="btn gps-toggle" data-gps="toggle" aria-pressed="false">GPS OFF</button></div>
       <p id="gpsStatus" class="gps-status" role="status" aria-live="polite">GPS spento. Usa le frecce per seguire la scheda manualmente.</p>
       <div class="gps-controls"><button type="button" class="btn" data-gps="prev" aria-label="Riga precedente">◀ Indietro</button><button type="button" class="btn" data-gps="center">Centra</button><button type="button" class="btn" data-gps="next" aria-label="Riga successiva">Avanti ▶</button></div>
-      <p class="gps-note">Indicazione orientativa, non valida per condotta, segnali, frenatura o prescrizioni. Il GPS può mancare in galleria o con schermo spento.</p>
+      <p class="gps-note">Indicazione orientativa, non valida per condotta, segnali, frenatura o prescrizioni. Il GPS resta richiesto quando passi a un’altra app: per spegnerlo premi Ferma. Il sistema può sospenderlo in background o a schermo spento; al rientro riprende automaticamente. Le frecce manuali e la chiusura del viaggio disattivano il GPS. Nessuna posizione viene salvata.</p>
     </section>
     <section class="sheet-tbl" aria-label="Scheda treno">
       <div class="colhead"><span>Fren.</span><span>Vel.</span><span style="text-align:right">Km</span><span>Località</span><span style="text-align:right">Dir.</span></div>

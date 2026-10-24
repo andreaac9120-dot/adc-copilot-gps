@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.9";
+const VERSION = "1.0.10";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile" };
 let imgURLs = {};
 
@@ -421,9 +421,9 @@ $("#popScrim").addEventListener("click", () => Scheda.popClose());
 document.addEventListener("keydown", e => { if (e.key === "Escape") { if (Scheda.popOpenVisible()) return Scheda.popClose(); closeSheet(); } });
 $("#fImport").addEventListener("change", e => { importaFiles([...e.target.files]); e.target.value = ""; });
 document.addEventListener("change", e => { if (e.target.classList && e.target.classList.contains("fDoc")) docScegli(e.target); });
-// Privacy/batteria: interrompi la geolocalizzazione in background o a schermo spento.
+// Mantieni la scelta dell'utente; al rientro riacquisisci un fix fresco.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && typeof GPS !== "undefined") GPS.close("GPS sospeso: app non visibile. Per riprendere, premi GPS OFF · Attiva.");
+  if (typeof GPS !== "undefined") GPS.visibilityChanged();
 });
 addEventListener("online", net); addEventListener("offline", net);
 addEventListener("popstate", () => { const m = location.hash.match(/^#v=(.+)$/); m ? apri(decodeURIComponent(m[1])) : home(); });

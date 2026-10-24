@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.9 — versione unica
+# ADC COPILOT 1.0.10 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -27,3 +27,13 @@ Le righe `condotta.R` di tipo `m3` contengono un oggetto `m3` con `velocita`, `i
 I pacchetti precedenti senza l'oggetto `m3` restano leggibili con la riga originale completa.
 
 Le prove software non sostituiscono i test reali su Android, specialmente per GPS, permessi e località ripetute.
+
+## GPS e passaggio in background (1.0.10)
+
+Il passaggio a un’altra app o lo spegnimento dello schermo non spegne più volontariamente il GPS. Al ritorno la richiesta di posizione viene rinnovata automaticamente, con due nuove rilevazioni per confermare una località. Il tasto **GPS ON · Ferma** interrompe la richiesta e il ritorno nell’app non la riattiva.
+
+Restano gli arresti quando si usano le frecce manuali, si chiude/cambia viaggio o si nega il permesso. Ricaricando o riaprendo da zero l’app occorre attivare nuovamente il GPS. Nessuna posizione viene salvata.
+
+Una PWA non può garantire aggiornamenti continui in background: Android/iOS o il browser possono sospenderli o terminare l’app. Per la continuità a schermo spento serve un’implementazione nativa con i relativi permessi e servizi di localizzazione.
+
+Verifica software: `node --test tests/*.test.js`. Sul telefono: attivare il GPS, passare a un’altra app per 10–30 secondi e tornare; ripetere bloccando lo schermo. Controllare ON e riacquisizione, poi premere Ferma e verificare che un nuovo passaggio in background non lo riattivi. Provare anche permesso negato, segnale assente e uscita dal viaggio.
