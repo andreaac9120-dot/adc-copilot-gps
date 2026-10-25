@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.11";
+const VERSION = "1.0.12";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -251,6 +251,7 @@ function testoErrore(err) {
 async function importaTesto(txt, nome) {
   let p;
   try { p = JSON.parse(txt); } catch (_) { return { err: `${nome}: file non leggibile (JSON non valido)` }; }
+  if (eBlocco(p)) return importaBlocco(p, nome);
   const e = controlla(p);
   if (e.length) return { err: `${nome}: ${e.slice(0, 10).join("; ")}${e.length > 10 ? ` (e altri ${e.length - 10} problemi)` : ""}` };
   const vecchio = await DB.getViaggio(p.id);
@@ -281,6 +282,79 @@ async function importaTesto(txt, nome) {
   try { await DB.putViaggio(p, blobs); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
   return { ok: true, id: p.id, avvisi: avvisi.map(a => `${p.intestazione.treno}: ${a}`) };
 }
+// ---------- Blocco formazione da ADC FORMAZIONE (1.0.12) ----------
+// Il file blocco_formazione_<treno>_<data>.json contiene solo lo studio di formazione:
+//   { id, comando, formazione, fonti?, aperti? }  (scheda F16 del progetto ADC FORMAZIONE)
+// L'app lo unisce al viaggio già salvato, con le stesse regole dello script F16g_unisci_formazione.py:
+// formazione sostituita, revisione +1, comando e fonti aggiunti senza doppioni, aperti "[FORMAZIONE]" rinnovati.
+// Il risultato passa lo stesso controllo dei pacchetti: se non è valido non si salva nulla.
+const PREF_F = "[FORMAZIONE] ";
+const eBlocco = b => isObj(b) && b.formato === undefined && isObj(b.formazione) && (b.id === undefined || isStr(b.id));
+const numeroTreno = id => (/^([0-9A-Za-z]+)_\d{4}-\d{2}-\d{2}$/.exec(String(id || "")) || [])[1];
+const dataDi = id => (/_(\d{4}-\d{2}-\d{2})$/.exec(String(id || "")) || [])[1];
+// Trova il viaggio: prima lo stesso id; altrimenti stessa data e numero treno del blocco scritto nell'intestazione
+// (es. blocco 63718 e viaggio "65720 / 65729 (origine 63718/56072 …)"). In questo secondo caso chiede conferma.
+async function viaggioPerBlocco(b) {
+  if (!isStr(b.id)) return { err: "il blocco non ha l'id del viaggio (<treno>_<aaaa-mm-gg>)" };
+  const stesso = await DB.getViaggio(b.id);
+  if (stesso) return { v: stesso };
+  const num = numeroTreno(b.id), data = dataDi(b.id);
+  if (!num || !data) return { err: `id ${b.id} non valido` };
+  const re = new RegExp(`(^|[^0-9A-Za-z])${num}([^0-9A-Za-z]|$)`);
+  const tutti = await DB.listViaggi();
+  const cand = tutti.filter(v => dataDi(v && v.id) === data && isObj(v.intestazione) && (re.test(String(v.intestazione.treno)) || re.test(String(v.condotta && v.condotta.TRENO))));
+  if (!cand.length) return { err: `nessun viaggio salvato del ${data.split("-").reverse().join("/")} con il treno ${num}: importa prima il pacchetto di condotta` };
+  if (cand.length > 1) return { err: `più viaggi del ${data.split("-").reverse().join("/")} contengono il treno ${num} (${cand.map(v => v.id).join(", ")}): chiedi a Claude il blocco con l'id esatto del viaggio` };
+  const v = cand[0];
+  if (!confirm(`Il blocco formazione è del treno ${num}. Aggiungerlo al viaggio ${v.intestazione.treno} del ${v.intestazione.data_viaggio}?`)) return { err: "non importato (unione annullata)" };
+  return { v };
+}
+function unisciBlocco(v, b) {
+  const p = JSON.parse(JSON.stringify(v)), avvisi = [];
+  delete p.importato; delete p.avvisi_import;
+  const F = JSON.parse(JSON.stringify(b.formazione));
+  // collegamenti a tratti o località che nel viaggio non esistono (studio fatto senza il pacchetto): tolti e segnalati
+  const segOk = k => has(p.condotta.SEG, k);
+  const locOk = new Set((p.condotta.R || []).filter(r => r && r.t === "loc").map(r => r.id));
+  if (isArr(F.tratti)) F.tratti.forEach(t => { if (isObj(t) && t.seg !== undefined && !segOk(t.seg)) { avvisi.push(`formazione ${t.da}–${t.a}: collegamento al tratto "${t.seg}" tolto (non esiste nella scheda di condotta)`); delete t.seg; } });
+  p.formazione = F;
+  p.revisione = (Number.isInteger(v.revisione) ? v.revisione : 0) + 1;
+  p.creato = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  // "STUDIA SOLO …" resta com'è; ogni altro testo (es. "STUDIO LINEA FORMAZIONE con la traccia") diventa il comando standard
+  const cmd = isStr(b.comando) && /^STUDIA SOLO .+/.test(b.comando.split("\n")[0]) ? b.comando.split("\n")[0] : "STUDIO LINEA FORMAZIONE";
+  if (!p.comandi.includes(cmd)) p.comandi.push(cmd);
+  const viste = new Set(p.fonti.map(f => `${f.doc}\u0000${f.edizione}`));
+  for (const f of isArr(b.fonti) ? b.fonti : []) {
+    const k = isObj(f) ? `${f.doc}\u0000${f.edizione}` : "";
+    if (isObj(f) && !viste.has(k)) { p.fonti.push(f); viste.add(k); }
+  }
+  const aperti = (isArr(p.aperti) ? p.aperti : []).filter(a => !(isObj(a) && isStr(a.cosa) && a.cosa.startsWith(PREF_F.trim())));
+  for (const a0 of isArr(b.aperti) ? b.aperti : []) {
+    if (!isObj(a0)) { aperti.push(a0); continue; }
+    const a = { ...a0 };
+    if (isStr(a.cosa) && !a.cosa.startsWith(PREF_F.trim())) a.cosa = PREF_F + a.cosa;
+    if (a.seg !== undefined && !segOk(a.seg)) { avvisi.push(`punto aperto "${a.cosa}": tratto "${a.seg}" tolto`); delete a.seg; }
+    if (a.loc !== undefined && !locOk.has(a.loc)) { avvisi.push(`punto aperto "${a.cosa}": località "${a.loc}" tolta`); delete a.loc; }
+    aperti.push(a);
+  }
+  if (aperti.length || p.aperti !== undefined) p.aperti = aperti;
+  return { p, avvisi };
+}
+async function importaBlocco(b, nome) {
+  let r;
+  try { r = await viaggioPerBlocco(b); } catch (err) { return { err: `${nome}: archivio non leggibile (${testoErrore(err)})` }; }
+  if (r.err) return { err: `${nome}: ${r.err}` };
+  const v = r.v;
+  if (!valido(v)) return { err: `${nome}: il viaggio ${v.id} salvato nel telefono non è leggibile con le regole attuali: reimporta prima il pacchetto di condotta` };
+  const { p, avvisi } = unisciBlocco(v, b);
+  const e = controlla(p);
+  if (e.length) return { err: `${nome}: formazione non aggiunta, il risultato non è valido: ${e.slice(0, 8).join("; ")}${e.length > 8 ? ` (e altri ${e.length - 8} problemi)` : ""}` };
+  p.importato = new Date().toISOString();
+  p.avvisi_import = [...(isArr(v.avvisi_import) ? v.avvisi_import.filter(a => !String(a).startsWith("formazione ") && !String(a).startsWith("punto aperto ")) : []), ...avvisi];
+  try { await DB.putViaggio(p, {}); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
+  return { ok: true, id: p.id, avvisi: [`${p.intestazione.treno}: formazione aggiunta (revisione ${p.revisione})`, ...avvisi.map(a => `${p.intestazione.treno}: ${a}`)] };
+}
+
 // D01 – ogni file ha il suo esito; un errore su un file non ferma gli altri.
 async function importaFiles(files) {
   const esiti = [];
@@ -402,7 +476,8 @@ async function esporta(id) {
 // Pacchetto unico dal 22/10/2026: le regole complete (GEO, righe M3 compatte, controllo) sono nella scheda 16c del progetto.
 const CHIUSURA = 'Al termine consegnami il pacchetto unico .adc.json secondo la scheda 16c (GEO dal registro GPS_17, righe M3 compatte, controllo con GPS_16e).';
 // Dal 25/10/2026 lo studio di formazione si fa nel progetto ADC FORMAZIONE, partendo dall'ultimo pacchetto del viaggio.
-const CHIUSURA_F = "Se ti ho allegato il pacchetto .adc.json del viaggio, al termine consegnami lo stesso pacchetto con il blocco formazione e la revisione +1 (scheda F16, controllo con GPS_16e 1.0.4); se non te l'ho allegato, consegnami il file blocco_formazione.";
+// Dalla 1.0.12 la PWA importa direttamente il file blocco_formazione e lo unisce al viaggio salvato.
+const CHIUSURA_F = "Al termine consegnami il file blocco_formazione_<treno>_<data>.json (scheda F16) con l'id del viaggio del pacchetto di condotta, se lo conosci: lo importo nella PWA. Se ti ho allegato il pacchetto .adc.json, va bene anche il pacchetto aggiornato.";
 const PROGETTO = { condotta: "ADC COPILOT", formazione: "ADC FORMAZIONE" };
 async function copia(txt) { try { await navigator.clipboard.writeText(txt); return true; } catch (_) { return false; } }
 async function inviaClaude(testo, files = [], proj = "condotta") {
@@ -416,7 +491,7 @@ async function inviaClaude(testo, files = [], proj = "condotta") {
   openSheet(shHead("Invia a Claude", copiato ? "Comando copiato negli appunti" : "Copia il testo") +
     `<div class="reqbox">${esc(testo)}</div>` +
     (files.length ? `<div class="note">Allega in chat anche: ${files.map(f => esc(f.name)).join(", ")}.</div>` : "") +
-    `<div class="note">Apri l'app Claude, entra nel progetto <b>${PROGETTO[proj] || PROGETTO.condotta}</b> e incolla.${proj === "formazione" ? " Allega anche l'ultimo pacchetto .adc.json del viaggio, se ce l'hai." : ""}</div>`);
+    `<div class="note">Apri l'app Claude, entra nel progetto <b>${PROGETTO[proj] || PROGETTO.condotta}</b> e incolla.${proj === "formazione" ? " Il file blocco_formazione che riceverai si importa qui con Importa pacchetto." : ""}</div>`);
 }
 function inputs() {
   return { scheda: [...$("#fScheda").files], traccia: $("#tTraccia").value.trim(), massa: $("#nMassa").value.trim(), doc: [...$("#fDocNuovo").files] };
