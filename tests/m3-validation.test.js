@@ -8,11 +8,13 @@ const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const context = vm.createContext({});
 vm.runInContext(source.slice(0, source.indexOf("// Converte la data URL")), context);
 const controlla = vm.runInContext("controlla", context);
+const vuoto = e => assert.equal(e.length, 0, [...e].join(" | "));
 
 function pacchetto(riga) {
   return {
-    formato: "adc-copilot-pacchetto", versione_formato: 1, id: "T1_2026-10-22",
-    revisione: 1, creato: "2026-10-22T00:00:00Z", comandi: ["test"],
+    formato: "adc-copilot-pacchetto", versione_formato: 2, id: "T1_2026-10-22",
+    revisione: 1, creato: "2026-10-22T00:00:00Z", comandi: ["STUDIO LINEA CONDOTTA"],
+    input: { tipo: "scheda_treno", fase: "completa" },
     fonti: [{ doc: "M3", edizione: "2026" }],
     intestazione: { treno: "T1", percorso: "A–B", data_viaggio: "22/10/2026", loco: [{ tipo: "E", etichetta: "E" }] },
     condotta: {
@@ -30,14 +32,21 @@ const m3Claude = {
     note: ["Spostabile tra il km 159 e il km 166"], modulo: "M3 n. 2345436 riga 3" }
 };
 
-test("il validatore importa il formato di Claude, SD e il vecchio M3", () => {
-  assert.equal(controlla(pacchetto(m3Claude)).length, 0);
-  assert.equal(controlla(pacchetto({ ...m3Claude, m3: { ...m3Claude.m3, binario: "SD" } })).length, 0);
-  assert.equal(controlla(pacchetto({ t: "m3", n: "M3 riga 3 · solo binario destro: 80 km/h per 4000 m", km: "159.000", v: "—/80" })).length, 0);
+test("il validatore importa il formato M3 dello schema 1.0.4, anche SD", () => {
+  vuoto(controlla(pacchetto(m3Claude)));
+  vuoto(controlla(pacchetto({ ...m3Claude, m3: { ...m3Claude.m3, binario: "SD" } })));
+  const { v, ...senzaV } = m3Claude;
+  vuoto(controlla(pacchetto(senzaV)));
 });
 
-test("il validatore rifiuta M3 incoerenti", () => {
-  assert.ok(controlla(pacchetto({ ...m3Claude, v: "60" })).some(x => x.includes("dati M3 non validi")));
-  assert.ok(controlla(pacchetto({ ...m3Claude, m3: { ...m3Claude.m3, binario: "X" } })).some(x => x.includes("dati M3 non validi")));
+test("il validatore rifiuta M3 incoerenti, vecchi o con campi vuoti (come GPS_16e 1.0.4)", () => {
+  const no = r => assert.ok(controlla(pacchetto(r)).some(x => x.includes("dati M3 non validi")), JSON.stringify(r));
+  no({ ...m3Claude, v: "60" });
+  no({ ...m3Claude, v: "" });                                          // D14
+  no({ ...m3Claude, m3: { ...m3Claude.m3, binario: "X" } });
+  no({ ...m3Claude, m3: { ...m3Claude.m3, binario: "S/D" } });         // D12
+  no({ ...m3Claude, m3: { ...m3Claude.m3, velocita: "" } });           // D13
+  no({ ...m3Claude, m3: { ...m3Claude.m3, inizio_km: " " } });
+  no({ t: "m3", n: "M3 riga 3 · solo binario destro: 80 km/h per 4000 m", km: "159.000", v: "—/80" }); // D11
   assert.ok(controlla(pacchetto({ ...m3Claude, t: "pt" })).some(x => x.includes("dati M3 su una riga non M3")));
 });

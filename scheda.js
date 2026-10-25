@@ -9,7 +9,8 @@ function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = fals
 function openSheet(html) { $("#sheetIn").innerHTML = html; $("#sheet").hidden = false; $("#scrim").hidden = false; $("#sheet").scrollTop = 0; const b = $("#sheetIn .close"); b && b.focus(); }
 function closeSheet() { $("#sheet").hidden = true; $("#scrim").hidden = true; }
 function shHead(t, sub, back) { return `${back ? `<button class="back" type="button" data-back="${esc(back)}">‹ Indietro</button>` : ""}<div class="sh-top"><div><div class="sh-title">${esc(t)}</div><div class="sh-sub">${esc(sub)}</div></div><button class="close" type="button">Chiudi</button></div>`; }
-function fact(lbl, val, src, st) { return `<div class="fact ${ST(st)}"><span class="lbl">${esc(lbl)}</span><span class="val">${val}</span>${src ? `<span class="src">${esc(src)}</span>` : ""}</div>`; }
+// st === null: informazione senza stato nel pacchetto (es. testo di servizio): bordo neutro, mai un colore di stato inventato.
+function fact(lbl, val, src, st) { return `<div class="fact${st === null ? "" : " " + ST(st)}"><span class="lbl">${esc(lbl)}</span><span class="val">${val}</span>${src ? `<span class="src">${esc(src)}</span>` : ""}</div>`; }
 
 const Scheda = (() => {
   let P = null, IMG = {};
@@ -30,6 +31,7 @@ const Scheda = (() => {
       (ap.length ? `<button class="chip warnchip" type="button" data-aperti="1">Da studiare: ${ap.length} ▾</button>` : "") +
       `<span class="chip">rev. ${pkg.revisione}</span>`;
     $("#vAvvisi").innerHTML = (I.avvisi || []).map(a => `<div class="alert">${bold(a)}</div>`).join("") +
+      (pkg.avvisi_import || []).map(a => `<div class="alert"><b>Attenzione:</b> ${esc(a)}</div>`).join("") +
       (pkg.input && pkg.input.fase === "fase1_traccia" ? `<div class="alert">Studio con la sola traccia (fase 1): sigle complementari, Rs/NoRS e confronto con le velocità della Scheda restano in attesa della Scheda Treno.</div>` : "");
     $("#vNota").textContent = I.nota || "Tocca il nome di una località per fiancata, utenze, indicatori e pagine del FL. Strumento di consultazione: fa fede la Scheda Treno ufficiale con le prescrizioni ricevute.";
     $("#vPiede").textContent = [I.piede, "Fonti: " + pkg.fonti.map(f => `${f.doc} ${f.edizione}`).join(" · ")].filter(Boolean).join(" ");
@@ -91,7 +93,7 @@ const Scheda = (() => {
     const r = R[i], nx = nextLoc(i), seg = SEG[r.s] || { fl: "" };
     openSheet(shHead(r.n, `km ${r.km} · ${seg.fl}`) + `<div class="menu">
      ${nx ? `<button class="item" type="button" data-act="fianc" data-i="${i}"><span>Fiancata fino a ${esc(nx.n)}</span><small>${esc(seg.fl)}</small></button>` : ""}
-     <button class="item" type="button" data-act="tel" data-i="${i}"><span>Utenze DM / DC</span><small>GSM-R</small></button>
+     <button class="item" type="button" data-act="tel" data-i="${i}"><span>Utenze DM / DC / DCO</span><small>GSM-R</small></button>
      ${IND[r.id] ? `<button class="item" type="button" data-act="ind" data-i="${i}"><span>Indicatori di direzione</span><span class="ind">${esc(IND[r.id].treno)}</span></button>` : stItem("Indicatori di direzione", "indicatori di direzione (schema unifilare)", i)}
      <button class="item" type="button" data-act="aff" data-i="${i}"><span>Linee affiancate</span><small>${esc(affLabel(r))}</small></button>
      ${PLPROT[r.id] ? `<button class="item" type="button" data-act="pl" data-i="${i}"><span>PL protetti dai segnali</span><small>trascritti</small></button>` : ""}
@@ -130,7 +132,7 @@ const Scheda = (() => {
     const r = R[i], dm = r.id && DM[r.id], dc = DCO[r.s];
     openSheet(shHead("Utenze", r.n, "loc:" + i) +
       `<h3 class="grp">DM della stazione</h3>${dm ? dm.map(p => phone(...p)).join("") : stItem("Nessuna utenza DM nei FL studiati", "utenza telefonica DM", i)}
-       <h3 class="grp">DC / D.O.T.E. / DCCM del tratto</h3>${dc && dc.length ? dc.map(p => phone(...p)).join("") : stItem("Utenze del tratto non studiate", "utenze DC/DCO del tratto", i)}
+       <h3 class="grp">DC / DCO / D.O.T.E. / DCCM del tratto</h3>${dc && dc.length ? dc.map(p => phone(...p)).join("") : stItem("Utenze del tratto non studiate", "utenze DC/DCO del tratto", i)}
        ${SEG[r.s] ? `<div class="note">${esc(SEG[r.s].esercizio)}.</div>` : ""}`);
   }
   // D02 – Esito delle affiancate del tratto (AFF[s].esito): "nessuna", "presenti", "non_verificabile".
@@ -171,12 +173,12 @@ const Scheda = (() => {
       const c = l.colonna;
       return openSheet(shHead(l.linea, `Sigle Complementari · ${l.tratto}`, null) +
         `<div class="sh-top"><div><div class="sigla-big">Sigla ${esc(c.sigla)}</div><div class="sh-sub">${esc(c.tit)} · indicatore ${esc(l.ind)} a ${esc(r.n)}</div></div></div>` +
-        (l.nota ? fact("Colonna scelta", esc(l.nota), "Sigla di composizione e gruppo del treno", "V") : "") +
+        (l.nota ? fact("Colonna scelta", esc(l.nota), "Sigla di composizione e gruppo del treno", null) : "") +
         colTbl("Binario legale o di sinistra", c.sx) + colTbl("Binario illegale o di destra", c.dx) +
         (c.nota ? `<div class="note">${esc(c.nota)}</div>` : "") +
         sg.map(x => fact(x.t, esc(x.x), x.src, x.st)).join(""));
     }
-    openSheet(shHead(l.linea, `Sigle Complementari · ${l.tratto}`, null) + (l.nota ? fact("Colonna scelta", esc(l.nota), "", "R") : "") +
+    openSheet(shHead(l.linea, `Sigle Complementari · ${l.tratto}`, null) + (l.nota ? fact("Colonna scelta", esc(l.nota), "", null) : "") +
       (sg.length ? sg.map(x => fact(x.t, esc(x.x), x.src, x.st)).join("") : "") +
       stItem("Colonna delle Sigle Complementari", "fiancata delle Sigle Complementari per la linea affiancata " + l.linea + " (" + l.tratto + ")", i));
   }
@@ -184,7 +186,7 @@ const Scheda = (() => {
     const L = P.intestazione.loco[k], tipo = L.tipo, multi = P.intestazione.loco.length > 1;
     const rows = LOCO.filter(l => !multi || !l.loco || l.loco === tipo);
     openSheet(shHead(`${tipo} · compatibilità`, L.tratti ? "Tratti " + L.tratti.join(", ") : "") + rows.map(l => fact(l.t, esc(l.x), l.src, l.st)).join("") +
-      `<div class="note">Le limitazioni di compatibilità non sono comprese nelle velocità della Scheda Treno: le prescrive il formatore con M40 Tecnico. Con locomotiva isolata vanno rispettate d'iniziativa.</div>`);
+      `<div class="note">Le limitazioni di compatibilità non sono comprese nelle velocità della Scheda Treno: le prescrive il formatore con M40 Tecnico.</div>`);
   }
   function presc() {
     const Q = PRESC;
@@ -202,12 +204,14 @@ const Scheda = (() => {
     const avv = a => { const fuori = isOut(a.loc); return `<div class="prow${fuori ? " pout" : ""}"><div class="ploc">${esc(a.loc)}</div><div class="pnote"><b>${esc(a.tit)}</b></div><div class="ptxt">${esc(a.txt)}</div>${fuori ? `<div class="note">${esc(Q.fuoriNota || "")}</div>` : ""}</div>`; };
     const mod = m => `<h3 class="grp">${esc(m.tipo)} n. ${esc(m.n)}</h3><div class="note">${esc(m.linea)} · consegnato a ${esc(m.stazione)} · ${esc(m.data)}</div>${(m.righe || []).map(x => riga(m, x)).join("")}${(m.avvisi || []).map(avv).join("")}`;
     openSheet(shHead("Prescrizioni di movimento", `Riepilogo n. ${Q.riep.n} · ${Q.riep.tratto}`) +
-      fact("Moduli consegnati", esc(Q.riep.consegnati), Q.src, "V") + Q.moduli.map(mod).join("") +
+      fact("Moduli consegnati", esc(Q.riep.consegnati), Q.src, null) + Q.moduli.map(mod).join("") +
       `<div class="note">Trascrizione dei moduli ricevuti; le righe fuori dal tratto studiato sono attenuate. In servizio fanno fede i moduli originali.</div>`);
   }
   // STUDIO LINEA FORMAZIONE
   // D03 – la nota del dato (condizioni, eccezioni) resta sempre visibile accanto al valore.
   function dcell(d) { return d ? `<span class="dot d-${ST(d.st)}"></span>${esc(d.v ?? "—")}${d.nota ? `<div class="dnota">${esc(d.nota)}</div>` : ""}` : `<span class="note">—</span>`; }
+  // Esito scritto nell'etichetta, stato (V/R/I/N) nel colore: sono due informazioni diverse (C01, C16).
+  const ESITO_TXT = { ok: "OK", non_ok: "NON OK", attenzione: "ATTENZIONE", non_eseguibile: "non eseguibile" };
   function formazione() {
     const F = P.formazione;
     const srcs = [];
@@ -217,24 +221,26 @@ const Scheda = (() => {
     }).join("");
     const pm = F.prestazione_massima.map(x => fact(`${x.loco} · GDP ${x.gdp}`, `${x.t != null ? `<b>${esc(x.t)} t</b> · ` : ""}${esc(x.dove)}`, x.src, x.st)).join("");
     const pg = F.pgos;
-    // D13 – provenienza della massa: fornita da te o ricavata dai documenti del treno (M18, M40 Tecnico…), mai dalla Prestazione della Scheda Treno.
+    // C01 – lo stato mostrato è sempre quello del pacchetto: niente V automatico per la massa fornita da te.
+    // Provenienza: fornita da te o letta nei documenti del treno (M18, M40 Tecnico…), mai dalla Prestazione della Scheda Treno.
     const massaFact = pg => {
       if (pg.massa_t == null) return fact("Massa del treno", "non fornita: controlli non eseguibili", "La Prestazione della Scheda Treno non si usa", "N");
       const o = pg.massa_origine;
-      const lbl = o === "utente" ? "Massa del treno (fornita da te)" : o === "documenti" ? "Massa del treno (dai documenti del treno)" : "Massa del treno (origine non indicata)";
-      const st = o === "utente" ? "V" : o === "documenti" ? ST(pg.massa_st || "I") : "I";
-      return fact(lbl, `<b>${esc(pg.massa_t)} t</b>`, pg.massa_fonte || (o === "documenti" ? "documento non indicato" : ""), st);
+      const lbl = o === "utente" ? "Massa del treno (fornita da te)" : "Massa del treno (dai documenti del treno)";
+      const RS = pg.massa_riscontro;
+      return fact(lbl, `<b>${esc(pg.massa_t)} t</b>`, pg.massa_fonte, pg.massa_st) +
+        (RS ? fact(`Riscontro nei documenti · ${RS.esito === "discorde" ? "DISCORDE" : "concorde"}`, `<b>${esc(RS.t)} t</b>${RS.esito === "discorde" ? " – masse diverse: i controlli restano incerti finché non chiarisci quale vale" : ""}`, RS.fonte, RS.st) : "");
     };
     const pgos = `<h3 class="grp">Controlli PGOS</h3>` +
       massaFact(pg) +
-      pg.controlli.map(c => fact(`${c.t} · ${{ ok: "OK", non_ok: "NON OK", attenzione: "ATTENZIONE", non_eseguibile: "non eseguibile" }[c.esito]}`, esc(c.x || ""), c.src, c.esito === "non_ok" ? "R" : c.st)).join("") +
+      pg.controlli.map(c => fact(`${c.t} · ${ESITO_TXT[c.esito]}`, esc(c.x || ""), c.src, c.st)).join("") +
       (pg.nota ? `<div class="note">${esc(pg.nota)}</div>` : "");
     const S = F.staffe;
     const staffe = S ? `<h3 class="grp">Staffe di immobilizzazione</h3>` +
       fact("Pendenza massima del percorso", dcell(S.pendenza_max), S.pendenza_max.src, S.pendenza_max.st) +
       fact("Grado di frenatura più gravoso", dcell(S.grado_gravoso), S.grado_gravoso.src, S.grado_gravoso.st) +
       (S.tab36_min ? fact("Tab. 36 – % minima", dcell(S.tab36_min), S.tab36_min.src, S.tab36_min.st) : "") +
-      fact("Esito", esc({ ok: "OK", non_ok: "NON OK", non_eseguibile: "non eseguibile" }[S.esito] + (S.x ? " – " + S.x : "")), S.src || "", S.esito === "ok" ? "V" : "N") : "";
+      fact(`Esito · ${ESITO_TXT[S.esito]}`, esc(S.x || ""), S.src, S.st) : "";
     // Dati mancanti per staffe o PGOS: si possono mandare i documenti del treno.
     const manca = pg.massa_t == null || (S && S.esito === "non_eseguibile") || pg.controlli.some(c => c.esito === "non_eseguibile");
     openSheet(shHead("Studio linea formazione", P.intestazione.percorso) +
@@ -245,9 +251,11 @@ const Scheda = (() => {
   }
   function aperti() {
     const A = P.aperti || [];
-    const lab = { da_studiare: "da studiare", attesa_scheda_treno: "in attesa della Scheda Treno", attesa_massa_treno: "serve la massa del treno", fl_mancante: "FL mancante", illeggibile: "documento illeggibile" };
+    const lab = { da_studiare: "da studiare", attesa_scheda_treno: "in attesa della Scheda Treno", attesa_massa_treno: "serve la massa del treno", fl_mancante: "FL mancante", illeggibile: "documento illeggibile", discrepanza_massa: "masse diverse tra te e i documenti" };
+    // punti di formazione → progetto ADC FORMAZIONE (prefisso "[FORMAZIONE]", massa)
+    const proj = a => String(a.cosa || "").startsWith("[FORMAZIONE]") || a.motivo === "attesa_massa_treno" || a.motivo === "discrepanza_massa" ? "formazione" : "condotta";
     const serveDoc = A.some(a => a.motivo === "attesa_massa_treno");
-    openSheet(shHead("Da studiare", `${A.length} punti aperti`) + `<div class="menu">${A.map(a => `<div class="item row-st"><span>${esc(a.cosa)}<br><small>${esc(lab[a.motivo] || "da studiare")}</small></span><button class="studia" type="button" data-req="${esc(a.richiesta)}">Studia</button></div>`).join("")}</div>
+    openSheet(shHead("Da studiare", `${A.length} punti aperti`) + `<div class="menu">${A.map(a => `<div class="item row-st"><span>${esc(a.cosa)}<br><small>${esc(lab[a.motivo] || "da studiare")}</small></span><button class="studia" type="button" data-req="${esc(a.richiesta)}" data-proj="${proj(a)}">Studia</button></div>`).join("")}</div>
       ${serveDoc ? docBox(TRENO) : ""}
       <div class="note">Studia invia la richiesta a Claude. Poi importa il pacchetto aggiornato: sostituisce questa revisione.</div>`);
   }

@@ -1,6 +1,6 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.10";
-const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile" };
+const VERSION = "1.0.11";
+const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
 // ---------- Tema ----------
@@ -22,44 +22,61 @@ function net() {
   }
 }
 
-// ---------- Controllo dei pacchetti (D01, D04, D09, D10, D11, D12) ----------
-// Stessi vincoli dello schema 16d per tutto ciò che la scheda usa, applicati offline PRIMA del salvataggio.
-// I campi introdotti con la 1.0.2 (AFF.esito, pgos.massa_origine/massa_st) qui sono facoltativi,
-// così i pacchetti prodotti prima restano importabili; lo schema 16d li rende obbligatori per i nuovi.
+// ---------- Controllo dei pacchetti – schema 1.0.4, versione_formato 2 (25/10/2026) ----------
+// Stessi vincoli dello schema GPS_16d 1.0.4 e del validatore GPS_16e 1.0.4 usati da Claude (rapporto di revisione
+// del 22/10/2026, C03 e C15): un pacchetto che Claude consegna come VALIDO entra, uno che il validatore rifiuta no.
+// I pacchetti con versione_formato 1 non sono più ammessi: vanno ripubblicati.
+// Fa eccezione il controllo delle pagine FL alla revisione 1, che si fa all'import (le immagini non restano nel record).
+const FORMATO = 2;
 const STATI = ["V", "R", "I", "N"];
+const ORDINE_ST = { V: 3, R: 2, I: 1, N: 0 }; // qualità della prova: V migliore, N peggiore
 const ESITI_AFF = ["nessuna", "presenti", "non_verificabile"];
+const ESITI_PGOS = ["ok", "non_ok", "attenzione", "non_eseguibile"];
+const ESITI_STAFFE = ["ok", "non_ok", "non_eseguibile"];
 const ORIGINI_MASSA = ["utente", "documenti"];
+const MOTIVI = ["da_studiare", "attesa_scheda_treno", "attesa_massa_treno", "fl_mancante", "illeggibile", "discrepanza_massa"];
 const MAX_IMG = 12 * 1024 * 1024; // caratteri base64 per immagine (circa 9 MB)
 const isObj = x => x !== null && typeof x === "object" && !Array.isArray(x);
 const isStr = x => typeof x === "string";
+const isTxt = x => isStr(x) && /\S/.test(x); // testo non vuoto, non solo spazi
 const isArr = Array.isArray;
 const isSt = x => STATI.includes(x);
+const has = (o, k) => isObj(o) && isStr(k) && Object.prototype.hasOwnProperty.call(o, k); // C12: mai riferimenti risolti dal prototipo
 function dataVera(a, m, g) { const d = new Date(Date.UTC(a, m - 1, g)); return d.getUTCFullYear() === a && d.getUTCMonth() === m - 1 && d.getUTCDate() === g; }
+function dataOraVera(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/.exec(isStr(s) ? s : "");
+  return !!m && dataVera(+m[1], +m[2], +m[3]) && +m[4] < 24 && +m[5] < 60 && +m[6] < 60 && (!m[9] || (+m[9] < 24 && +m[10] < 60));
+}
 
 function controlla(p) {
   const e = [];
   const ok = (c, msg) => { if (!c) e.push(msg); return !!c; };
-  const dato = (d, dove) => d === undefined || ok(isObj(d) && "v" in d && isSt(d.st) && (d.nota === undefined || isStr(d.nota)), `${dove}: dato non valido`);
+  // Dato {v, st, src, nota}: la fonte è obbligatoria per V, R e I; solo N (non reperito) può non averla.
+  const datoOk = d => isObj(d) && "v" in d && (d.v === null || isStr(d.v) || Number.isFinite(d.v)) && isSt(d.st) &&
+    (d.st === "N" ? (d.src === undefined || isTxt(d.src)) : isTxt(d.src)) && (d.nota === undefined || isStr(d.nota));
+  const dato = (d, dove) => d === undefined || ok(datoOk(d), `${dove}: dato non valido (stato V/R/I/N e fonte obbligatoria salvo N)`);
   const tel = (L, dove) => ok(isArr(L) && L.every(x => isArr(x) && x.length === 4 && isStr(x[0]) && isStr(x[1]) && isStr(x[2]) && isSt(x[3])), `${dove}: utenze non valide`);
 
   if (!isObj(p) || p.formato !== "adc-copilot-pacchetto") return ["non è un pacchetto ADC COPILOT"];
-  if (p.versione_formato !== 1) return [`formato v${p.versione_formato} non supportato da questa app (v1): aggiorna l'app`];
-  const m = /^[0-9A-Za-z]+_(\d{4})-(\d{2})-(\d{2})$/.exec(isStr(p.id) ? p.id : "");
-  if (ok(m, "id mancante o non valido")) ok(dataVera(+m[1], +m[2], +m[3]), `id ${p.id}: data inesistente`);
+  if (p.versione_formato !== FORMATO) return [p.versione_formato === 1
+    ? "pacchetto vecchio (formato 1, prima del 25/10/2026): fallo ripubblicare a Claude con lo schema 1.0.4"
+    : `formato v${p.versione_formato} non supportato da questa app (v${FORMATO}): aggiorna l'app`];
+  const m = /^([0-9A-Za-z]+)_(\d{4})-(\d{2})-(\d{2})$/.exec(isStr(p.id) ? p.id : "");
+  if (ok(m, "id mancante o non valido")) ok(dataVera(+m[2], +m[3], +m[4]), `id ${p.id}: data inesistente`);
   ok(Number.isInteger(p.revisione) && p.revisione >= 1, "revisione mancante o minore di 1");
-  // D12 – data di creazione: formato ISO e giorno di calendario reale
-  const cr = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.exec(isStr(p.creato) ? p.creato : "");
-  ok(cr && dataVera(+cr[1], +cr[2], +cr[3]) && !isNaN(Date.parse(p.creato)), "data di creazione mancante o non valida");
-  ok(isArr(p.comandi) && p.comandi.length && p.comandi.every(isStr), "comandi mancanti");
-  ok(isArr(p.fonti) && p.fonti.length && p.fonti.every(f => isObj(f) && isStr(f.doc) && isStr(f.edizione)), "fonti mancanti");
-  if (p.input !== undefined) ok(isObj(p.input), "input non valido");
+  ok(dataOraVera(p.creato), "data di creazione mancante o non valida (es. 2026-10-25T09:00:00Z)");
+  ok(isArr(p.comandi) && p.comandi.length && p.comandi.every(c => isStr(c) && /^(STUDIO LINEA CONDOTTA|STUDIO LINEA FORMAZIONE|STUDIA SOLO .+)$/.test(c)) && new Set(p.comandi).size === p.comandi.length, "comandi mancanti o non validi");
+  ok(isArr(p.fonti) && p.fonti.length && p.fonti.every(f => isObj(f) && isTxt(f.doc) && isTxt(f.edizione) && (f.uso === undefined || isStr(f.uso))), "fonti mancanti o senza documento/edizione");
+  ok(isObj(p.input) && ["scheda_treno", "traccia"].includes(p.input.tipo) && ["fase1_traccia", "completa"].includes(p.input.fase), "input del viaggio mancante o non valido");
 
   const I = p.intestazione;
   if (ok(isObj(I), "intestazione mancante")) {
-    ok(isStr(I.treno) && I.treno, "intestazione: numero treno mancante");
+    ok(isTxt(I.treno), "intestazione: numero treno mancante");
     ok(isStr(I.percorso), "intestazione: percorso mancante");
     const dv = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(isStr(I.data_viaggio) ? I.data_viaggio : "");
-    if (ok(dv, "intestazione: data del viaggio mancante")) ok(dataVera(+dv[3], +dv[2], +dv[1]), `intestazione: data ${I.data_viaggio} inesistente`);
+    if (ok(dv, "intestazione: data del viaggio mancante") && ok(dataVera(+dv[3], +dv[2], +dv[1]), `intestazione: data ${I.data_viaggio} inesistente`) && m)
+      ok(+dv[3] === +m[2] && +dv[2] === +m[3] && +dv[1] === +m[4], `data del viaggio ${I.data_viaggio} diversa da quella dell'id ${p.id}`); // C05
+    if (m && isTxt(I.treno)) ok(new RegExp(`(^|[^0-9A-Za-z])${m[1]}([^0-9A-Za-z]|$)`).test(I.treno), `numero treno "${I.treno}" diverso da quello dell'id ${p.id}`); // C05
     ok(isArr(I.loco) && I.loco.length && I.loco.every(l => isObj(l) && isStr(l.tipo) && isStr(l.etichetta) && (l.tratti === undefined || (isArr(l.tratti) && l.tratti.every(isStr)))), "intestazione: locomotive mancanti");
     for (const k of ["chip", "avvisi"]) if (I[k] !== undefined) ok(isArr(I[k]) && I[k].every(isStr), `intestazione: ${k} non valido`);
   }
@@ -74,66 +91,65 @@ function controlla(p) {
   ok(isStr(c.TRENO), "scheda: TRENO mancante");
   if (!ok(isArr(c.R) && c.R.length >= 2, "scheda: righe del percorso mancanti") || e.length) return e;
 
-  for (const [k, g] of Object.entries(c.SEG)) ok(isObj(g) && isStr(g.nome) && isStr(g.fl) && isStr(g.pag) && isStr(g.esercizio) && isSt(g.st), `tratto ${k}: dati non validi`);
-  // D11 – ogni riga località ha un id proprio: se il treno passa due volte dalla stessa località, due id diversi.
+  for (const [k, g] of Object.entries(c.SEG)) ok(/^[A-Z][0-9]?$/.test(k) && isObj(g) && isStr(g.nome) && isStr(g.fl) && isStr(g.pag) && isStr(g.esercizio) && isSt(g.st), `tratto ${k}: dati non validi`);
+  // ogni riga località ha un id proprio: se il treno passa due volte dalla stessa località, due id diversi.
   const ids = new Set();
   c.R.forEach((r, i) => {
     const n = `riga ${i + 1}`;
     if (!ok(isObj(r) && isStr(r.n) && isStr(r.km) && ["loc", "pt", "m3"].includes(r.t), `${n}: riga non valida`)) return;
     for (const k of ["g", "v", "ind"]) if (r[k] !== undefined) ok(isStr(r[k]), `${n} (${r.n}): ${k} non valido`);
-    if (r.s !== undefined) ok(c.SEG[r.s], `${n} (${r.n}): tratto ${r.s} inesistente`);
+    if (r.s !== undefined) ok(has(c.SEG, r.s), `${n} (${r.n}): tratto ${r.s} inesistente`);
+    if (r.end !== undefined) ok(r.end === true, `${n} (${r.n}): end non valido`);
     if (r.t === "loc") {
       ok(r.s !== undefined, `${n} (${r.n}): tratto mancante`);
-      if (ok(isStr(r.id) && r.id, `${n} (${r.n}): id località mancante`)) {
+      if (ok(isTxt(r.id), `${n} (${r.n}): id località mancante`)) {
         ok(!ids.has(r.id), `${n} (${r.n}): id "${r.id}" ripetuto (ogni passaggio da una località deve avere un id proprio)`);
         ids.add(r.id);
       }
     }
     if (r.t === "m3") {
-      ok(c.PRESC, `${n} (${r.n}): riga prescrizioni senza il blocco delle prescrizioni`); // D10
-      if (r.m3 !== undefined) ok(isObj(r.m3) &&
-        ["velocita", "inizio_km", "lunghezza_m"].every(k => isStr(r.m3[k])) &&
-        ["velocita", "lunghezza_m"].every(k => !r.m3[k] || /^\d+$/.test(r.m3[k])) &&
-        ["S", "D", "SD", "S/D", ""].includes(r.m3.binario) &&
-        isArr(r.m3.note) && r.m3.note.every(isStr) &&
-        (r.m3.modulo === undefined || isStr(r.m3.modulo)) &&
-        (r.v === undefined || r.v === r.m3.velocita),
+      ok(c.PRESC, `${n} (${r.n}): riga prescrizioni senza il blocco delle prescrizioni`);
+      const d = r.m3; // C15 – solo il formato strutturato dello schema: niente M3 vecchio, niente campi vuoti
+      ok(isObj(d) && isStr(d.velocita) && /^\d{1,3}$/.test(d.velocita) && isTxt(d.inizio_km) &&
+        isStr(d.lunghezza_m) && /^\d{1,6}$/.test(d.lunghezza_m) && ["S", "D", "SD"].includes(d.binario) &&
+        isArr(d.note) && d.note.every(isTxt) && (d.modulo === undefined || isStr(d.modulo)) &&
+        (r.v === undefined || r.v === d.velocita),
         `${n} (${r.n}): dati M3 non validi`);
     } else if (r.m3 !== undefined) ok(false, `${n} (${r.n}): dati M3 su una riga non M3`);
   });
   ok(c.R[c.R.length - 1].end === true, "l'ultima riga del percorso non è segnata come arrivo");
 
-  for (const [s, L] of Object.entries(c.FIANC)) { ok(c.SEG[s], `fiancata: tratto ${s} inesistente`); ok(isArr(L) && L.every(x => isObj(x) && isStr(x.k) && isStr(x.x) && isSt(x.st) && isStr(x.src)), `fiancata ${s}: righe non valide`); }
-  for (const [s, L] of Object.entries(c.DCO)) { ok(c.SEG[s], `DCO: tratto ${s} inesistente`); tel(L, `DCO ${s}`); }
+  for (const [s, L] of Object.entries(c.FIANC)) { ok(has(c.SEG, s), `fiancata: tratto ${s} inesistente`); ok(isArr(L) && L.every(x => isObj(x) && isStr(x.k) && isStr(x.x) && isSt(x.st) && isTxt(x.src)), `fiancata ${s}: righe non valide`); }
+  for (const [s, L] of Object.entries(c.DCO)) { ok(has(c.SEG, s), `DCO: tratto ${s} inesistente`); tel(L, `DCO ${s}`); }
   for (const [s, a] of Object.entries(c.AFF)) {
-    ok(c.SEG[s], `affiancate: tratto ${s} inesistente`);
-    ok(isObj(a) && isStr(a.txt) && isStr(a.src) && isSt(a.st) && (a.esito === undefined || ESITI_AFF.includes(a.esito)), `affiancate ${s}: esito non valido`);
+    ok(has(c.SEG, s), `affiancate: tratto ${s} inesistente`);
+    ok(isObj(a) && isStr(a.txt) && isTxt(a.src) && isSt(a.st) && ESITI_AFF.includes(a.esito), `affiancate ${s}: esito non valido`);
   }
   // GEO facoltativo: solo coordinate documentate e riferite all'id del passaggio, non al nome.
   if (isObj(c.GEO)) for (const [id, g] of Object.entries(c.GEO)) {
     ok(ids.has(id), `GEO: località ${id} inesistente`);
     ok(isObj(g) && Number.isFinite(g.lat) && Math.abs(g.lat) <= 90 &&
-      Number.isFinite(g.lon) && Math.abs(g.lon) <= 180 && isStr(g.src) && g.src.trim() && isSt(g.st),
+      Number.isFinite(g.lon) && Math.abs(g.lon) <= 180 && isTxt(g.src) && isSt(g.st),
       `GEO ${id}: coordinate/fonte/stato non validi`);
   }
   for (const [id, L] of Object.entries(c.DM)) { ok(ids.has(id), `DM: località ${id} inesistente`); tel(L, `DM ${id}`); }
-  for (const [id, d] of Object.entries(c.IND)) { ok(ids.has(id), `indicatori: località ${id} inesistente`); ok(isObj(d) && isStr(d.treno) && isStr(d.src) && isSt(d.st) && isArr(d.tutti) && d.tutti.every(x => isArr(x) && x.length === 3 && x.every(isStr)), `indicatori ${id}: non validi`); }
-  for (const [id, d] of Object.entries(c.PLPROT || {})) { ok(ids.has(id), `PL protetti: località ${id} inesistente`); ok(isObj(d) && isStr(d.src) && isSt(d.st) && isArr(d.pl) && d.pl.every(x => isArr(x) && x.length === 3 && x.every(isStr)), `PL protetti ${id}: non validi`); }
+  for (const [id, d] of Object.entries(c.IND)) { ok(ids.has(id), `indicatori: località ${id} inesistente`); ok(isObj(d) && isStr(d.treno) && isTxt(d.src) && isSt(d.st) && isArr(d.tutti) && d.tutti.every(x => isArr(x) && x.length === 3 && x.every(isStr)), `indicatori ${id}: non validi`); }
+  for (const [id, d] of Object.entries(c.PLPROT || {})) { ok(ids.has(id), `PL protetti: località ${id} inesistente`); ok(isObj(d) && isTxt(d.src) && isSt(d.st) && isArr(d.pl) && d.pl.every(x => isArr(x) && x.length === 3 && x.every(isStr)), `PL protetti ${id}: non validi`); }
   const colOk = b => isObj(b) && isStr(b.pag) && isStr(b.sez) && isArr(b.rows) && b.rows.every(x => isArr(x) && x.length === 5 && x.slice(0, 4).every(isStr) && (x[4] === 0 || x[4] === 1));
   for (const [id, L] of Object.entries(c.AFFLOC)) {
     ok(ids.has(id), `affiancate: località ${id} inesistente`);
     ok(isArr(L) && L.length && L.every(l => isObj(l) && isStr(l.linea) && isStr(l.ind) && isStr(l.fl) && isStr(l.tratto) &&
       (l.colonna === undefined || (isObj(l.colonna) && isStr(l.colonna.sigla) && isStr(l.colonna.tit) && colOk(l.colonna.sx) && colOk(l.colonna.dx))) &&
-      (l.sigle === undefined || (isArr(l.sigle) && l.sigle.every(x => isObj(x) && isStr(x.t) && isStr(x.x) && isSt(x.st))))), `affiancate ${id}: linee non valide`);
+      (l.sigle === undefined || (isArr(l.sigle) && l.sigle.every(x => isObj(x) && isStr(x.t) && isStr(x.x) && isSt(x.st) && (x.st === "N" ? (x.src === undefined || isTxt(x.src)) : isTxt(x.src)))))), `affiancate ${id}: linee non valide`);
   }
-  for (const [k, g] of Object.entries(c.FLPAG)) ok(isObj(g) && isStr(g.titolo) && isArr(g.pag) && g.pag.length && g.pag.every(x => isObj(x) && isStr(x.t) && isStr(x.src) && isStr(x.img) && x.img.startsWith("img/")), `pagine FL ${k}: non valide`);
+  for (const [k, g] of Object.entries(c.FLPAG)) ok(isObj(g) && isStr(g.titolo) && isArr(g.pag) && g.pag.length && g.pag.every(x => isObj(x) && isStr(x.t) && isTxt(x.src) && isStr(x.img) && x.img.startsWith("img/")), `pagine FL ${k}: non valide`);
   for (const [id, d] of Object.entries(c.FLLOC)) {
     ok(ids.has(id), `pagine FL: località ${id} inesistente`);
-    if (ok(isObj(d), `pagine FL di ${id}: non valide`)) for (const [t, k] of Object.entries(d)) ok(["fianc", "schema"].includes(t) && isStr(k) && c.FLPAG[k], `pagine FL di ${id}: ${k} inesistente`);
+    if (ok(isObj(d), `pagine FL di ${id}: non valide`)) for (const [t, k] of Object.entries(d)) ok(["fianc", "schema"].includes(t) && has(c.FLPAG, k), `pagine FL di ${id}: ${k} inesistente`);
   }
-  ok(c.LOCO.every(l => isObj(l) && isStr(l.t) && isStr(l.x) && isSt(l.st) && isStr(l.src)), "scheda: compatibilità locomotiva non valida");
+  ok(c.LOCO.every(l => isObj(l) && isStr(l.t) && isStr(l.x) && isSt(l.st) && isTxt(l.src)), "scheda: compatibilità locomotiva non valida");
   const Q = c.PRESC;
-  if (Q) ok(isObj(Q.riep) && isStr(Q.riep.n) && isStr(Q.riep.tratto) && isStr(Q.riep.consegnati) && isStr(Q.src) &&
+  if (Q) ok(isObj(Q.riep) && isStr(Q.riep.n) && isStr(Q.riep.tratto) && isStr(Q.riep.consegnati) && isTxt(Q.src) &&
     isArr(Q.dentro) && Q.dentro.every(isStr) && isArr(Q.fuori) && Q.fuori.every(isStr) &&
     isArr(Q.moduli) && Q.moduli.every(md => isObj(md) && ["M3", "M40", "M40DL", "M40TELEC"].includes(md.tipo) && isStr(md.n) &&
       (md.righe === undefined || (isArr(md.righe) && md.righe.every(x => (isArr(x) && x.length === 7 && x.every(isStr)) || (isObj(x) && isStr(x.sub))))) &&
@@ -141,29 +157,72 @@ function controlla(p) {
       (md.avvisi === undefined || (isArr(md.avvisi) && md.avvisi.every(a => isObj(a) && isStr(a.loc) && isStr(a.tit) && isStr(a.txt))))), "prescrizioni: dati non validi");
 
   const F = p.formazione;
+  ok(!(isArr(p.comandi) && p.comandi.includes("STUDIO LINEA FORMAZIONE")) || isObj(F), "comando formazione dichiarato ma studio di formazione assente");
   if (F !== undefined && F !== null && ok(isObj(F), "formazione non valida")) {
     if (ok(isArr(F.tratti) && F.tratti.length, "formazione: tratti mancanti"))
-      F.tratti.forEach((t, i) => { if (ok(isObj(t) && isStr(t.da) && isStr(t.a) && isStr(t.linea) && typeof t.affiancata === "boolean", `formazione: tratto ${i + 1} non valido`)) for (const k of ["codifica_tc", "d4", "frenatura", "gdp"]) dato(t[k], `formazione ${t.da}–${t.a} ${k}`); });
-    ok(isArr(F.prestazione_massima) && F.prestazione_massima.every(x => isObj(x) && isStr(x.loco) && isStr(x.gdp) && isStr(x.dove) && (x.t === null || Number.isFinite(x.t)) && isSt(x.st) && isStr(x.src)), "formazione: prestazione massima non valida");
+      F.tratti.forEach((t, i) => {
+        if (!ok(isObj(t) && isStr(t.da) && isStr(t.a) && isStr(t.linea) && typeof t.affiancata === "boolean", `formazione: tratto ${i + 1} non valido`)) return;
+        if (t.seg !== undefined) ok(has(c.SEG, t.seg), `formazione: tratto ${i + 1}: ${t.seg} inesistente`);
+        for (const k of ["codifica_tc", "d4", "frenatura", "gdp"]) dato(t[k], `formazione ${t.da}–${t.a} ${k}`);
+      });
+    ok(isArr(F.prestazione_massima) && F.prestazione_massima.every(x => isObj(x) && isStr(x.loco) && isStr(x.gdp) && isStr(x.dove) && (x.t === null || Number.isFinite(x.t)) && isSt(x.st) && isTxt(x.src)), "formazione: prestazione massima non valida");
     const G = F.pgos;
+    let massa = null;
     if (ok(isObj(G) && isArr(G.controlli), "formazione: controlli PGOS mancanti")) {
-      ok(G.massa_t === null || (Number.isFinite(G.massa_t) && G.massa_t > 0), "PGOS: massa del treno non valida");
-      ok(G.massa_origine === undefined || ORIGINI_MASSA.includes(G.massa_origine), "PGOS: origine della massa non ammessa (solo utente o documenti del treno)");
-      ok(G.massa_st === undefined || isSt(G.massa_st), "PGOS: stato della massa non valido");
-      ok(G.controlli.every(x => isObj(x) && isStr(x.t) && ["ok", "non_ok", "attenzione", "non_eseguibile"].includes(x.esito) && isSt(x.st) && isStr(x.src)), "PGOS: controlli non validi");
-      ok(G.massa_t !== null || G.controlli.every(x => x.esito === "non_eseguibile"), "PGOS: controlli con esito senza massa del treno");
+      massa = G.massa_t;
+      const campi = ["massa_origine", "massa_fonte", "massa_st", "massa_riscontro"].filter(k => G[k] !== undefined);
+      if (massa === null) {
+        ok(!campi.length, `PGOS: senza massa del treno non vanno indicati ${campi.join(", ")}`);
+        ok(isTxt(G.nota), "PGOS: senza massa serve la nota \"non eseguibile: massa del treno non fornita\"");
+      } else if (ok(Number.isFinite(massa) && massa > 0, "PGOS: massa del treno non valida")) {
+        ok(ORIGINI_MASSA.includes(G.massa_origine), "PGOS: origine della massa mancante (solo utente o documenti del treno)");
+        ok(isTxt(G.massa_fonte), "PGOS: fonte della massa mancante");
+        ok(isSt(G.massa_st), "PGOS: stato della massa mancante");
+        if (G.massa_origine === "utente") ok(G.massa_st === "V", "PGOS: la massa fornita da te ha stato V");
+        if (G.massa_origine === "documenti") ok(["V", "I"].includes(G.massa_st) && G.massa_riscontro === undefined, "PGOS: massa dai documenti con stato V o I e senza riscontro");
+        const f = String(G.massa_fonte || "").toLowerCase();
+        ok(!(f.includes("prestazione") && f.includes("scheda")), "PGOS: la massa non si prende dalla Prestazione della Scheda Treno");
+        const RS = G.massa_riscontro;
+        if (RS !== undefined) ok(isObj(RS) && Number.isFinite(RS.t) && RS.t > 0 && isTxt(RS.fonte) && isSt(RS.st) && ["concorde", "discorde"].includes(RS.esito), "PGOS: riscontro della massa non valido");
+      }
+      ok(G.nota === undefined || isStr(G.nota), "PGOS: nota non valida");
+      G.controlli.forEach((x, i) => {
+        const nome = `PGOS: controllo ${i + 1}${isObj(x) && isStr(x.t) ? ` (${x.t})` : ""}`;
+        if (!ok(isObj(x) && isStr(x.t) && ESITI_PGOS.includes(x.esito) && isSt(x.st) && isTxt(x.src) && (x.x === undefined || isStr(x.x)), `${nome}: non valido`)) return;
+        // C01/C16 – stato ed esito sono separati: l'esito non può avere uno stato migliore delle sue premesse.
+        if (x.esito === "non_eseguibile") ok(x.st === "N", `${nome}: non eseguibile richiede stato N`);
+        else if (ok(massa !== null, `${nome}: esito senza massa del treno`) && isSt(G.massa_st)) {
+          ok(ORDINE_ST[x.st] <= ORDINE_ST[G.massa_st], `${nome}: stato ${x.st} migliore di quello della massa (${G.massa_st})`);
+          if (isObj(G.massa_riscontro) && G.massa_riscontro.esito === "discorde") ok(x.st === "I" || x.st === "N", `${nome}: con la massa discorde dai documenti lo stato è al massimo I`);
+        }
+      });
+      if (isObj(G.massa_riscontro) && G.massa_riscontro.esito === "discorde")
+        ok(isArr(p.aperti) && p.aperti.some(a => isObj(a) && a.motivo === "discrepanza_massa"), "PGOS: massa discorde dai documenti senza il punto aperto \"discrepanza_massa\"");
     }
     const S = F.staffe;
-    if (S !== undefined && S !== null && ok(isObj(S) && ["ok", "non_ok", "non_eseguibile"].includes(S.esito) && isObj(S.pendenza_max) && isObj(S.grado_gravoso), "staffe: dati non validi")) {
+    if (S !== undefined && S !== null && ok(isObj(S) && ESITI_STAFFE.includes(S.esito) && isSt(S.st) && isTxt(S.src) && isObj(S.pendenza_max) && isObj(S.grado_gravoso) && (S.x === undefined || isStr(S.x)), "staffe: dati non validi (esito, stato e fonte obbligatori)")) {
       dato(S.pendenza_max, "staffe: pendenza"); dato(S.grado_gravoso, "staffe: grado"); dato(S.tab36_min, "staffe: tab. 36");
+      if (S.esito === "non_eseguibile") ok(S.st === "N", "staffe: non eseguibile richiede stato N");
+      else {
+        ok(S.st !== "N", "staffe: esito con stato N");
+        ok(massa !== null, "staffe: esito senza massa del treno");
+        const prem = [S.pendenza_max, S.grado_gravoso, S.tab36_min].filter(d => isObj(d) && isSt(d.st)).map(d => d.st);
+        const peggiore = prem.reduce((a, b) => ORDINE_ST[b] < ORDINE_ST[a] ? b : a, "V");
+        ok(!isSt(S.st) || ORDINE_ST[S.st] <= ORDINE_ST[peggiore], `staffe: stato dell'esito ${S.st} migliore della premessa peggiore (${peggiore})`);
+      }
     }
   }
-  if (p.aperti !== undefined) ok(isArr(p.aperti) && p.aperti.every(a => isObj(a) && isStr(a.cosa) && isStr(a.richiesta)), "punti aperti non validi");
-  // D09 – immagini: solo data URL JPEG/PNG/WebP in base64, con percorso img/… e dimensione ragionevole
+  if (p.aperti !== undefined && ok(isArr(p.aperti), "punti aperti non validi"))
+    p.aperti.forEach((a, i) => {
+      if (!ok(isObj(a) && isStr(a.cosa) && isStr(a.richiesta) && (a.motivo === undefined || MOTIVI.includes(a.motivo)), `punto aperto ${i + 1}: non valido`)) return;
+      if (a.loc !== undefined) ok(ids.has(a.loc), `punto aperto ${i + 1}: località ${a.loc} inesistente`);
+      if (a.seg !== undefined) ok(has(c.SEG, a.seg), `punto aperto ${i + 1}: tratto ${a.seg} inesistente`);
+    });
+  // immagini: solo data URL JPEG/PNG/WebP in base64, con percorso img/… e dimensione ragionevole
   if (p.immagini !== undefined && ok(isObj(p.immagini), "immagini non valide"))
     for (const [k, v] of Object.entries(p.immagini))
       ok(/^img\/[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp)$/.test(k) && isStr(v) && v.length <= MAX_IMG && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(v), `immagine ${String(k).slice(0, 60)}: non è un'immagine incorporata valida`);
-  // D04 – nessuno stato fuori da V/R/I/N in tutto il pacchetto
+  // nessuno stato fuori da V/R/I/N in tutto il pacchetto
   const giro = (x, dove) => {
     if (isArr(x)) x.forEach((v, i) => giro(v, `${dove}[${i}]`));
     else if (isObj(x)) for (const [k, v] of Object.entries(x)) { if (k === "immagini") continue; if (k === "st" && !isSt(v)) e.push(`${dove}.st: stato "${String(v).slice(0, 20)}" non ammesso`); else giro(v, `${dove}.${k}`); }
@@ -203,17 +262,22 @@ async function importaTesto(txt, nome) {
     try { blobs[path] = await immagineDa(dataUrl); }
     catch (_) { return { err: `${nome}: pagina FL ${path} rovinata o non leggibile, pacchetto non importato` }; }
   }
-  // R05 – pagine FL usate dalla scheda ma assenti dal pacchetto: riuso quelle già nel telefono, e lo dico.
+  // Pagine FL usate dalla scheda ma assenti dal pacchetto.
+  // C02 – alla revisione 1 devono esserci tutte (come nel validatore GPS_16e 1.0.4). Dalla revisione 2 riuso quelle
+  // già nel telefono, ma l'avviso resta salvato nel viaggio e compare a ogni apertura, non solo all'import.
   const avvisi = [], usate = new Set(Object.values(p.condotta.FLPAG).flatMap(g => g.pag.map(x => x.img)));
+  const mancantiRev1 = [...usate].filter(path => !blobs[path]);
+  if (p.revisione === 1 && mancantiRev1.length) return { err: `${nome}: revisione 1 senza ${mancantiRev1.length} pagine FL (${mancantiRev1.slice(0, 3).join(", ")}${mancantiRev1.length > 3 ? "…" : ""}): chiedi a Claude di ripubblicarlo con tutte le pagine` };
   let riusate = 0;
   for (const path of usate) {
     if (blobs[path]) continue;
     let b = null; try { b = await DB.getImg(p.id, path); } catch (_) {}
     if (b) riusate++; else avvisi.push(`pagina FL ${path} assente: la scheda la mostrerà come mancante`);
   }
-  if (riusate) avvisi.push(`${riusate} pagine FL riusate dalla revisione già salvata: verifica che l'edizione del FL non sia cambiata`);
+  if (riusate) avvisi.push(`${riusate} pagine FL prese dalla revisione precedente: non sono state ripubblicate con questa revisione, verifica che l'edizione del FL non sia cambiata`);
   delete p.immagini;
   p.importato = new Date().toISOString();
+  p.avvisi_import = avvisi; // dato locale dell'app, mostrato nella scheda (non fa parte del pacchetto di Claude)
   try { await DB.putViaggio(p, blobs); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
   return { ok: true, id: p.id, avvisi: avvisi.map(a => `${p.intestazione.treno}: ${a}`) };
 }
@@ -295,7 +359,7 @@ async function home() {
       <button class="del" type="button" data-del="${esc(id)}" aria-label="Elimina ${esc(I.treno)}">Elimina</button></div>`;
   }).join("") : `<div class="empty">Nessun viaggio salvato. Quando Claude ti consegna il file <b>.adc.json</b> alla fine dello studio, scaricalo e toccalo con <b>Importa pacchetto</b>, oppure condividilo con questa app.</div>`;
   const M = buoni.flatMap(p => (p.aperti || []).map(a => ({ ...a, treno: p.intestazione.treno, vid: p.id })));
-  $("#messaggi").innerHTML = M.length ? M.map(a => `<div class="item row-st"><span><b>${esc(a.treno)}</b> · ${esc(a.cosa)}<br><small>${esc(LAB_MOTIVO[a.motivo] || "da studiare")}</small></span><span class="btns">${a.motivo === "attesa_massa_treno" ? `<button class="studia alt" type="button" data-docfor="${esc(a.vid)}">Allega doc.</button>` : ""}<button class="studia" type="button" data-req="${esc(a.richiesta)}">Studia</button></span></div>`).join("")
+  $("#messaggi").innerHTML = M.length ? M.map(a => `<div class="item row-st"><span><b>${esc(a.treno)}</b> · ${esc(a.cosa)}<br><small>${esc(LAB_MOTIVO[a.motivo] || "da studiare")}</small></span><span class="btns">${a.motivo === "attesa_massa_treno" ? `<button class="studia alt" type="button" data-docfor="${esc(a.vid)}">Allega doc.</button>` : ""}<button class="studia" type="button" data-req="${esc(a.richiesta)}" data-proj="${projDi(a)}">Studia</button></span></div>`).join("")
     : `<div class="note">Nessun punto aperto nei viaggi salvati. I messaggi completi di Claude restano nella chat del progetto.</div>`;
   try { const e = await navigator.storage.estimate(); $("#storeInfo").textContent = `Spazio usato nel telefono: ${(e.usage / 1048576).toFixed(1)} MB.`; } catch (_) {}
   await sospesi();
@@ -321,12 +385,14 @@ async function elimina(id) {
   try { await DB.delViaggio(id); toast("Viaggio eliminato"); } catch (err) { toast("Eliminazione non riuscita: " + testoErrore(err)); }
   home();
 }
-// Esporta il record salvato (senza le pagine FL) per farlo controllare o ripubblicare da Claude.
+// Esporta il record salvato (senza le pagine FL e senza i dati locali dell'app) per farlo controllare o ripubblicare da Claude.
+// Non è un backup completo: le pagine FL restano solo nel telefono.
 async function esporta(id) {
   const p = await DB.getViaggio(id);
   if (!p) return toast("Viaggio non trovato");
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 1)], { type: "application/json" }));
+  const { importato, avvisi_import, ...pacchetto } = p; // dati locali dell'app: non fanno parte del pacchetto di Claude
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(pacchetto, null, 1)], { type: "application/json" }));
   a.download = `${(id || "viaggio").replace(/[^0-9A-Za-z_-]/g, "_")}.adc.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
@@ -335,27 +401,34 @@ async function esporta(id) {
 // ---------- Invio a Claude ----------
 // Pacchetto unico dal 22/10/2026: le regole complete (GEO, righe M3 compatte, controllo) sono nella scheda 16c del progetto.
 const CHIUSURA = 'Al termine consegnami il pacchetto unico .adc.json secondo la scheda 16c (GEO dal registro GPS_17, righe M3 compatte, controllo con GPS_16e).';
+// Dal 25/10/2026 lo studio di formazione si fa nel progetto ADC FORMAZIONE, partendo dall'ultimo pacchetto del viaggio.
+const CHIUSURA_F = "Se ti ho allegato il pacchetto .adc.json del viaggio, al termine consegnami lo stesso pacchetto con il blocco formazione e la revisione +1 (scheda F16, controllo con GPS_16e 1.0.4); se non te l'ho allegato, consegnami il file blocco_formazione.";
+const PROGETTO = { condotta: "ADC COPILOT", formazione: "ADC FORMAZIONE" };
 async function copia(txt) { try { await navigator.clipboard.writeText(txt); return true; } catch (_) { return false; } }
-async function inviaClaude(testo, files = []) {
+async function inviaClaude(testo, files = [], proj = "condotta") {
   const copiato = await copia(testo);
   const dati = { title: "ADC COPILOT", text: testo };
   if (files.length) dati.files = files;
   if (navigator.share && (!navigator.canShare || navigator.canShare(dati))) {
-    try { await navigator.share(dati); toast(copiato ? "Scegli Claude. Il comando è anche copiato: se non compare, incollalo" : "Scegli Claude dal menu Condividi"); return; }
+    try { await navigator.share(dati); toast(`Scegli Claude, progetto ${PROGETTO[proj] || PROGETTO.condotta}.${copiato ? " Il comando è anche copiato: se non compare, incollalo" : ""}`); return; }
     catch (e) { if (e.name === "AbortError") return; }
   }
   openSheet(shHead("Invia a Claude", copiato ? "Comando copiato negli appunti" : "Copia il testo") +
     `<div class="reqbox">${esc(testo)}</div>` +
     (files.length ? `<div class="note">Allega in chat anche: ${files.map(f => esc(f.name)).join(", ")}.</div>` : "") +
-    `<div class="note">Apri l'app Claude, entra nel progetto ADC COPILOT e incolla.</div>`);
+    `<div class="note">Apri l'app Claude, entra nel progetto <b>${PROGETTO[proj] || PROGETTO.condotta}</b> e incolla.${proj === "formazione" ? " Allega anche l'ultimo pacchetto .adc.json del viaggio, se ce l'hai." : ""}</div>`);
 }
 function inputs() {
   return { scheda: [...$("#fScheda").files], traccia: $("#tTraccia").value.trim(), massa: $("#nMassa").value.trim(), doc: [...$("#fDocNuovo").files] };
 }
 // Documenti del treno (M18, BFC, M40 Tecnico…) per massa, freni a mano e staffe.
-const DOC_USO = "ricava massa rimorchiata, massa frenata a mano (freni a vite), % di carri carichi e massa assiale minima dei vuoti, poi fai il calcolo delle staffe (PE CTI 16/2017) e i controlli PGOS. La massa del treno va presa solo da questi documenti, mai dalla Prestazione della Scheda Treno: nel pacchetto metti pgos.massa_origine \"documenti\", in massa_fonte il documento e la riga usati e in massa_st lo stato della lettura. I documenti valgono solo per questo viaggio: eliminali dalle fonti con VIAGGIO TERMINATO.";
+// C09 – un'unica regola sull'origine della massa: se l'hai scritta tu vale quella e i documenti sono solo il riscontro.
+const DOC_DATI = "ricava massa rimorchiata, massa frenata a mano (freni a vite), % di carri carichi e massa assiale minima dei vuoti, poi fai il calcolo delle staffe (PE CTI 16/2017) e i controlli PGOS.";
+const DOC_FINE = " Mai la Prestazione della Scheda Treno. I documenti valgono solo per questo viaggio.";
+const DOC_USO = `${DOC_DATI} La massa del treno va presa da questi documenti: nel pacchetto metti pgos.massa_origine "documenti", in massa_fonte il documento e la riga usati e in massa_st lo stato della lettura (V o I).${DOC_FINE}`;
+const DOC_RISCONTRO = `${DOC_DATI} La massa del treno resta quella che ti ho scritto (pgos.massa_origine "utente", massa_st V): la massa letta nei documenti mettila solo in pgos.massa_riscontro con fonte, stato ed esito concorde/discorde. Se è discorde aggiungi un punto aperto "discrepanza_massa" con le due masse e tieni lo stato dei controlli al massimo I; non sostituire la massa.${DOC_FINE}`;
 function richiestaDoc(treno, files) {
-  return `STUDIA SOLO staffe di immobilizzazione e controlli PGOS – ${treno}\nTi allego i documenti del treno (${files.map(f => f.name).join(", ")}): ${DOC_USO}\nAl termine ripubblica il pacchetto viaggio .adc.json con la revisione aggiornata.`;
+  return `STUDIA SOLO staffe di immobilizzazione e controlli PGOS – ${treno}\nTi allego i documenti del treno (${files.map(f => f.name).join(", ")}): ${DOC_USO}\n${CHIUSURA_F}`;
 }
 const docScelti = new WeakMap(); // riquadro .docbox → File[]
 function docScegli(inp) {
@@ -368,7 +441,7 @@ function docScegli(inp) {
 function docInvia(t) {
   const box = t.closest(".docbox"), files = docScelti.get(box) || [];
   if (!files.length) return toast("Scegli prima i documenti del treno");
-  inviaClaude(richiestaDoc(box.querySelector(".fDoc").dataset.treno, files), files);
+  inviaClaude(richiestaDoc(box.querySelector(".fDoc").dataset.treno, files), files, "formazione");
 }
 async function docPer(id) {
   const p = await DB.getViaggio(id);
@@ -387,13 +460,18 @@ function comando(tipo) {
     if (!x.scheda.length && !x.traccia) return toast("Serve la Scheda Treno o la traccia");
     const mt = Number(x.massa);
     if (x.massa && !(Number.isFinite(mt) && mt > 0 && mt < 10000)) { $("#nMassa").focus(); return toast("Massa del treno non valida: scrivi le tonnellate, es. 1450"); }
-    const massa = x.massa ? `\nMassa del treno: ${mt} t (fornita da me: pgos.massa_origine "utente").` : x.doc.length ? "\nMassa del treno: ricavala dai documenti del treno allegati (mai dalla Prestazione della Scheda Treno)." : "\nMassa del treno non fornita: i controlli PGOS restano non eseguibili.";
-    const doc = x.doc.length ? `\nDocumenti del treno allegati (${x.doc.map(f => f.name).join(", ")}): ${DOC_USO}` : "";
+    const massa = x.massa ? `\nMassa del treno: ${mt} t (fornita da me: pgos.massa_origine "utente", massa_fonte "fornita dall'utente", massa_st V).` : x.doc.length ? "\nMassa del treno: ricavala dai documenti del treno allegati (mai dalla Prestazione della Scheda Treno)." : "\nMassa del treno non fornita: i controlli PGOS restano non eseguibili.";
+    const doc = x.doc.length ? `\nDocumenti del treno allegati (${x.doc.map(f => f.name).join(", ")}): ${x.massa ? DOC_RISCONTRO : DOC_USO}` : "";
     const base = x.scheda.length ? "STUDIO LINEA FORMAZIONE\nScheda Treno allegata." : `STUDIO LINEA FORMAZIONE con la traccia.\n\nTRACCIA:\n${x.traccia}\n`;
-    return inviaClaude(`${base}${massa}${doc}\n${CHIUSURA}`, [...x.scheda, ...x.doc]);
+    return inviaClaude(`${base}${massa}${doc}\n${CHIUSURA_F}`, [...x.scheda, ...x.doc], "formazione");
   }
 }
-function studia(req) { inviaClaude(`${req}\nAl termine ripubblica il pacchetto viaggio .adc.json con la revisione aggiornata.`); }
+function studia(req, proj) {
+  const f = proj === "formazione";
+  inviaClaude(`${req}\n${f ? CHIUSURA_F : "Al termine ripubblica il pacchetto viaggio .adc.json con la revisione aggiornata."}`, [], f ? "formazione" : "condotta");
+}
+// I punti aperti dello studio di formazione hanno il prefisso "[FORMAZIONE]" (scheda F16): vanno al progetto ADC FORMAZIONE.
+const projDi = a => (isObj(a) && isStr(a.cosa) && a.cosa.startsWith("[FORMAZIONE]")) || a.motivo === "attesa_massa_treno" || a.motivo === "discrepanza_massa" ? "formazione" : "condotta";
 
 // ---------- Eventi ----------
 document.addEventListener("click", e => {
@@ -405,7 +483,7 @@ document.addEventListener("click", e => {
   if (d.cmd) return comando(d.cmd);
   if (d.open) return apri(d.open);
   if (d.del) return elimina(d.del);
-  if (d.req) return studia(d.req);
+  if (d.req) return studia(d.req, d.proj);
   if (d.docsend) return docInvia(t);
   if (d.docfor) return docPer(d.docfor);
   if (d.exp) return esporta(d.exp);

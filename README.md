@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.10 — versione unica
+# ADC COPILOT 1.0.11 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -20,11 +20,21 @@ FL mancanti e coordinate GPS si passano direttamente in chat nel progetto. Le vo
 
 Caricare i file **nella root** della repository (comprese le tre icone `.png`). GitHub Pages: Settings → Pages → Deploy from a branch → `main` → `/(root)`. La cache offline si installa solo se tutti i file indicati in `sw.js` sono disponibili; sul telefono compare "Nuova versione dell'app pronta" → Aggiorna ora.
 
+## Pacchetto schema 1.0.4 (1.0.11, 25/10/2026)
+
+Dalla 1.0.11 l'app accetta solo pacchetti con `versione_formato` 2 (schema GPS_16d 1.0.4, validatore GPS_16e 1.0.4). I pacchetti precedenti vanno ripubblicati da Claude. Correzioni del rapporto di revisione del 22/10/2026:
+- **stato ed esito separati** (C01, C16): la scheda mostra sempre lo stato del pacchetto; niente V automatico per la massa fornita da te o per le staffe "ok", niente R forzato sui controlli "non ok". L'esito è scritto nell'etichetta, lo stato è il colore;
+- **stessi controlli del validatore di Claude** (C03, C15): fonti con documento ed edizione, `src` obbligatoria salvo stato N, regole della massa (utente → V; documenti → V o I; senza massa nessun campo massa e nota obbligatoria), stato dei controlli non migliore della massa, staffe con stato proprio e regola della premessa peggiore, identità del viaggio (numero treno e data dell'id = intestazione), riferimenti verificati solo come proprietà proprie;
+- **riscontro della massa** (C09): se scrivi la massa e alleghi anche i documenti, vale la tua; i documenti vanno in `massa_riscontro` e, se discordi, i controlli restano incerti e compare il punto aperto "masse diverse";
+- **pagine FL** (C02): alla revisione 1 devono esserci tutte; dalla revisione 2 quelle riusate dalla revisione precedente restano segnalate nella scheda a ogni apertura;
+- **locomotiva isolata** (C04): tolta la frase fissa; la regola PE CTI 10/2025 è ancora aperta e deve arrivare dal pacchetto;
+- **progetti**: la formazione, i documenti del treno e i punti aperti "[FORMAZIONE]" si inviano al progetto ADC FORMAZIONE; l'esportazione non contiene più i dati locali dell'app.
+
+Restano da fare (non in questa versione): progressive con "+" nel filtro della fiancata (C07), import concorrenti (C06), backup completo con le pagine FL (C11), limiti di dimensione all'import (C12), punti GPS C10, accessibilità (C14).
+
 ## Rallentamenti M3 nella scheda
 
-Le righe `condotta.R` di tipo `m3` contengono un oggetto `m3` con `velocita`, `inizio_km`, `lunghezza_m`, `binario` (`S`, `D` o `SD`), `note` (array di testi) e `modulo` facoltativo. Anche `S/D` è accettato. Il cippo di inizio resta testo, anche quando è spostabile. Le note si aprono toccando il triangolo giallo. Per un dato non verificabile si usa una stringa vuota: la scheda mostra un trattino o `?`.
-
-I pacchetti precedenti senza l'oggetto `m3` restano leggibili con la riga originale completa.
+Le righe `condotta.R` di tipo `m3` contengono un oggetto `m3` con `velocita` (cifre), `inizio_km` (testo non vuoto), `lunghezza_m` (cifre), `binario` (`S`, `D` o `SD`), `note` (array di testi) e `modulo` facoltativo. Il campo `v` della riga, se c'è, deve essere uguale a `m3.velocita`. Il cippo di inizio resta testo, anche quando è spostabile. Le note si aprono toccando il triangolo giallo. Le righe M3 senza oggetto `m3` (formato vecchio) non sono più ammesse.
 
 Le prove software non sostituiscono i test reali su Android, specialmente per GPS, permessi e località ripetute.
 
