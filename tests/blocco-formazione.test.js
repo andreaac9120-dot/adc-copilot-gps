@@ -104,3 +104,69 @@ test("seconda formazione: sostituisce la prima e rinnova i punti aperti di forma
   assert.equal(s2[0].p.revisione, 3);
   assert.equal(JSON.stringify(s2[0].p.aperti.map(a => a.cosa)), JSON.stringify(["Scheda Treno"]));
 });
+
+// 1.0.13 – ripubblicazione della sola condotta su un viaggio che ha già la formazione
+function ambienteMem(iniziali) {
+  const db = new Map(iniziali.map(v => [v.id, v])), chiesto = [];
+  const DB = {
+    getViaggio: async id => db.get(id) || null, listViaggi: async () => [...db.values()],
+    getImg: async () => null, putViaggio: async p => { db.set(p.id, JSON.parse(JSON.stringify(p))); }
+  };
+  const ctx = vm.createContext({ DB, confirm: m => { chiesto.push(m); return true; }, atob: x => Buffer.from(x, "base64").toString("binary"), Blob: class {}, Uint8Array });
+  vm.runInContext(app.slice(0, app.indexOf("// D01 – ogni file ha il suo esito")) + "\nthis.valido = p => controlla(p).length === 0;", ctx);
+  return { ctx, db, chiesto };
+}
+const condotta = rev => { const v = viaggio(); delete v.importato; v.revisione = rev; v.aperti = [{ cosa: "Scheda Treno", motivo: "attesa_scheda_treno", richiesta: "STUDIA SOLO …" }]; return v; };
+
+test("condotta ripubblicata senza formazione: la formazione unita dal blocco resta, revisione sopra quella salvata", async () => {
+  const { ctx, db, chiesto } = ambienteMem([]);
+  await ctx.importaTesto(JSON.stringify(condotta(1)), "c1.json");
+  const b = blocco("65720_2026-10-26"); b.formazione.tratti[0].seg = "A";
+  await ctx.importaTesto(JSON.stringify(b), "b.json");
+  assert.equal(db.get("65720_2026-10-26").revisione, 2);
+  const c2 = condotta(2); c2.input.fase = "completa"; c2.aperti = [];           // fase 2 con la Scheda, da ADC COPILOT
+  const r = await ctx.importaTesto(JSON.stringify(c2), "c2.json");
+  assert.equal(r.err, undefined, r.err);
+  const p = db.get("65720_2026-10-26");
+  assert.equal(p.revisione, 3);
+  assert.equal(p.input.fase, "completa");                                       // condotta nuova
+  assert.equal(p.formazione.tratti[0].gdp.v, "19");                             // formazione conservata
+  assert.equal(p.formazione.tratti[0].seg, "A");
+  assert.equal(JSON.stringify(p.aperti.map(a => a.cosa)), JSON.stringify(["[FORMAZIONE] massa del treno"]));
+  assert.ok(p.comandi.includes("STUDIO LINEA FORMAZIONE"));
+  assert.ok(p.fonti.some(f => f.doc === "DE CTI 03/2014"));
+  assert.equal(p.rev_condotta, 2);
+  assert.equal(chiesto.length, 0);                                              // nessuna domanda di "revisione più vecchia"
+  assert.ok(p.avvisi_import.some(a => a.includes("formazione del viaggio salvato conservata")));
+  assert.equal(vm.runInContext("controlla", ctx)(p).length, 0);
+});
+
+test("tratto sparito nella nuova condotta: collegamento tolto e segnalato", async () => {
+  const { ctx, db } = ambienteMem([]);
+  await ctx.importaTesto(JSON.stringify(condotta(1)), "c1.json");
+  const b = blocco("65720_2026-10-26"); b.formazione.tratti[0].seg = "A";
+  await ctx.importaTesto(JSON.stringify(b), "b.json");
+  const c2 = condotta(2);
+  c2.condotta.SEG = { B: c2.condotta.SEG.A }; c2.condotta.R.forEach(r => r.s = "B"); c2.condotta.AFF = { B: c2.condotta.AFF.A };
+  const r = await ctx.importaTesto(JSON.stringify(c2), "c2.json");
+  assert.equal(r.err, undefined, r.err);
+  const p = db.get("65720_2026-10-26");
+  assert.equal(p.formazione.tratti[0].seg, undefined);
+  assert.ok(p.avvisi_import.some(a => a.includes('tratto "A" tolto')));
+});
+
+test("pacchetto completo con la sua formazione: sostituisce tutto come prima", async () => {
+  const { ctx, db } = ambienteMem([]);
+  await ctx.importaTesto(JSON.stringify(condotta(1)), "c1.json");
+  await ctx.importaTesto(JSON.stringify(blocco("65720_2026-10-26")), "b.json");
+  const pieno = condotta(3); pieno.comandi.push("STUDIO LINEA FORMAZIONE");
+  pieno.formazione = JSON.parse(JSON.stringify(blocco().formazione)); delete pieno.formazione.tratti[0].seg;
+  pieno.formazione.tratti[0].gdp.v = "21";
+  await ctx.importaTesto(JSON.stringify(pieno), "p3.json");
+  const p = db.get("65720_2026-10-26");
+  assert.equal(p.revisione, 3); assert.equal(p.formazione.tratti[0].gdp.v, "21");
+});
+
+test("l'esportazione non contiene i dati locali dell'app", () => {
+  assert.match(app, /const \{ importato, avvisi_import, rev_condotta, \.\.\.pacchetto \} = p;/);
+});
