@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.12 — versione unica
+# ADC COPILOT 1.0.13 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -19,6 +19,10 @@ FL mancanti e coordinate GPS si passano direttamente in chat nel progetto. Le vo
 ## Pubblicazione
 
 Caricare i file **nella root** della repository (comprese le tre icone `.png`). GitHub Pages: Settings → Pages → Deploy from a branch → `main` → `/(root)`. La cache offline si installa solo se tutti i file indicati in `sw.js` sono disponibili; sul telefono compare "Nuova versione dell'app pronta" → Aggiorna ora.
+
+## Condotta ripubblicata dopo la formazione (1.0.13, 25/10/2026)
+
+Se importi un pacchetto di ADC COPILOT **senza** blocco formazione (per esempio la fase 2 con la Scheda Treno) su un viaggio che nel telefono ha già la formazione, l'app la **conserva**: tiene formazione, punti aperti "[FORMAZIONE]", fonti di formazione e comando, e porta la revisione sopra quella salvata. Il controllo "revisione più vecchia" usa la revisione della condotta (`rev_condotta`, dato locale), perché l'unione del blocco alza la revisione. I collegamenti a tratti o località che non esistono più nella nuova condotta si tolgono e restano segnalati nella scheda. Un pacchetto che contiene la sua formazione sostituisce tutto, come prima. L'esportazione non contiene i dati locali (`importato`, `avvisi_import`, `rev_condotta`).
 
 ## Blocco formazione (1.0.12, 25/10/2026)
 

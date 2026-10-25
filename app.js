@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.12";
+const VERSION = "1.0.13";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -255,7 +255,11 @@ async function importaTesto(txt, nome) {
   const e = controlla(p);
   if (e.length) return { err: `${nome}: ${e.slice(0, 10).join("; ")}${e.length > 10 ? ` (e altri ${e.length - 10} problemi)` : ""}` };
   const vecchio = await DB.getViaggio(p.id);
-  if (vecchio && Number.isInteger(vecchio.revisione) && vecchio.revisione > p.revisione && !confirm(`Hai già la revisione ${vecchio.revisione} del treno ${p.intestazione.treno}. Sostituirla con la ${p.revisione}, più vecchia?`)) return { err: `${nome}: non importato (tenuta la revisione ${vecchio.revisione})` };
+  // 1.0.13 – pacchetto di sola condotta su un viaggio che nel telefono ha già la formazione (unita dal blocco):
+  // il confronto delle revisioni si fa con la revisione della condotta, perché l'unione del blocco l'ha già alzata.
+  const tieniF = !!(vecchio && isObj(vecchio.formazione) && !isObj(p.formazione));
+  const revRif = vecchio ? (tieniF && Number.isInteger(vecchio.rev_condotta) ? vecchio.rev_condotta : vecchio.revisione) : 0;
+  if (vecchio && Number.isInteger(revRif) && revRif > p.revisione && !confirm(`Hai già la revisione ${vecchio.revisione} del treno ${p.intestazione.treno}. Sostituirla con la ${p.revisione}, più vecchia?`)) return { err: `${nome}: non importato (tenuta la revisione ${vecchio.revisione})` };
   // D09 – tutte le immagini vengono decodificate prima di salvare: se una è rovinata il pacchetto non entra,
   // così non resta in uso una vecchia pagina con lo stesso nome al posto di quella nuova.
   const blobs = {};
@@ -277,6 +281,13 @@ async function importaTesto(txt, nome) {
   }
   if (riusate) avvisi.push(`${riusate} pagine FL prese dalla revisione precedente: non sono state ripubblicate con questa revisione, verifica che l'edizione del FL non sia cambiata`);
   delete p.immagini;
+  p.rev_condotta = p.revisione; // dato locale: revisione della condotta ricevuta da ADC COPILOT
+  if (tieniF) {
+    const r = conservaFormazione(p, vecchio);
+    avvisi.push(...r.avvisi);
+    const e2 = controlla(p);
+    if (e2.length) return { err: `${nome}: non importato. Il viaggio salvato ha la formazione, ma non si può conservare con questa condotta: ${e2.slice(0, 6).join("; ")}. Rifai lo studio di formazione su questo pacchetto.` };
+  }
   p.importato = new Date().toISOString();
   p.avvisi_import = avvisi; // dato locale dell'app, mostrato nella scheda (non fa parte del pacchetto di Claude)
   try { await DB.putViaggio(p, blobs); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
@@ -311,7 +322,7 @@ async function viaggioPerBlocco(b) {
 }
 function unisciBlocco(v, b) {
   const p = JSON.parse(JSON.stringify(v)), avvisi = [];
-  delete p.importato; delete p.avvisi_import;
+  delete p.importato; delete p.avvisi_import; delete p.rev_condotta;
   const F = JSON.parse(JSON.stringify(b.formazione));
   // collegamenti a tratti o località che nel viaggio non esistono (studio fatto senza il pacchetto): tolti e segnalati
   const segOk = k => has(p.condotta.SEG, k);
@@ -349,10 +360,39 @@ async function importaBlocco(b, nome) {
   const { p, avvisi } = unisciBlocco(v, b);
   const e = controlla(p);
   if (e.length) return { err: `${nome}: formazione non aggiunta, il risultato non è valido: ${e.slice(0, 8).join("; ")}${e.length > 8 ? ` (e altri ${e.length - 8} problemi)` : ""}` };
+  p.rev_condotta = Number.isInteger(v.rev_condotta) ? v.rev_condotta : v.revisione;
   p.importato = new Date().toISOString();
   p.avvisi_import = [...(isArr(v.avvisi_import) ? v.avvisi_import.filter(a => !String(a).startsWith("formazione ") && !String(a).startsWith("punto aperto ")) : []), ...avvisi];
   try { await DB.putViaggio(p, {}); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
   return { ok: true, id: p.id, avvisi: [`${p.intestazione.treno}: formazione aggiunta (revisione ${p.revisione})`, ...avvisi.map(a => `${p.intestazione.treno}: ${a}`)] };
+}
+
+// 1.0.13 – ADC COPILOT ripubblica la condotta (es. fase 2 con la Scheda) senza il blocco formazione:
+// si conservano formazione, punti aperti "[FORMAZIONE]", fonti e comando di formazione del viaggio salvato,
+// e la revisione supera quella salvata. I collegamenti a tratti o località spariti dalla condotta si tolgono e si segnalano.
+function conservaFormazione(p, v) {
+  const avvisi = [];
+  const F = JSON.parse(JSON.stringify(v.formazione));
+  const segOk = k => has(p.condotta.SEG, k);
+  const locOk = new Set((p.condotta.R || []).filter(r => r && r.t === "loc").map(r => r.id));
+  if (isArr(F.tratti)) F.tratti.forEach(t => { if (isObj(t) && t.seg !== undefined && !segOk(t.seg)) { avvisi.push(`formazione ${t.da}–${t.a}: collegamento al tratto "${t.seg}" tolto (non esiste nella nuova condotta)`); delete t.seg; } });
+  p.formazione = F;
+  for (const c of isArr(v.comandi) ? v.comandi : []) if (c === "STUDIO LINEA FORMAZIONE" && !p.comandi.includes(c)) p.comandi.push(c);
+  const viste = new Set(p.fonti.map(f => `${f.doc}\u0000${f.edizione}`));
+  for (const f of isArr(v.fonti) ? v.fonti : []) {
+    const k = isObj(f) ? `${f.doc}\u0000${f.edizione}` : "";
+    if (isObj(f) && f.uso === "formazione" && !viste.has(k)) { p.fonti.push(f); viste.add(k); }
+  }
+  const apertiF = (isArr(v.aperti) ? v.aperti : []).filter(a => isObj(a) && isStr(a.cosa) && a.cosa.startsWith(PREF_F.trim())).map(a => ({ ...a }));
+  for (const a of apertiF) {
+    if (a.seg !== undefined && !segOk(a.seg)) { avvisi.push(`punto aperto "${a.cosa}": tratto "${a.seg}" tolto`); delete a.seg; }
+    if (a.loc !== undefined && !locOk.has(a.loc)) { avvisi.push(`punto aperto "${a.cosa}": località "${a.loc}" tolta`); delete a.loc; }
+  }
+  const altri = (isArr(p.aperti) ? p.aperti : []).filter(a => !(isObj(a) && isStr(a.cosa) && a.cosa.startsWith(PREF_F.trim())));
+  if (apertiF.length || p.aperti !== undefined) p.aperti = [...altri, ...apertiF];
+  p.revisione = Math.max(p.revisione, (Number.isInteger(v.revisione) ? v.revisione : 0) + 1);
+  avvisi.unshift(`formazione del viaggio salvato conservata (questo pacchetto contiene solo la condotta); revisione ${p.revisione}`);
+  return { avvisi };
 }
 
 // D01 – ogni file ha il suo esito; un errore su un file non ferma gli altri.
@@ -465,7 +505,7 @@ async function esporta(id) {
   const p = await DB.getViaggio(id);
   if (!p) return toast("Viaggio non trovato");
   const a = document.createElement("a");
-  const { importato, avvisi_import, ...pacchetto } = p; // dati locali dell'app: non fanno parte del pacchetto di Claude
+  const { importato, avvisi_import, rev_condotta, ...pacchetto } = p; // dati locali dell'app: non fanno parte del pacchetto di Claude
   a.href = URL.createObjectURL(new Blob([JSON.stringify(pacchetto, null, 1)], { type: "application/json" }));
   a.download = `${(id || "viaggio").replace(/[^0-9A-Za-z_-]/g, "_")}.adc.json`;
   document.body.appendChild(a); a.click(); a.remove();
