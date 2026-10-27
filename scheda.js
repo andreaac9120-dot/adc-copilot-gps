@@ -38,6 +38,8 @@ const Scheda = (() => {
     render();
   }
 
+  const affInDubbio = L => Array.isArray(L) && L.length > 0 && L.every(l => /DA VERIFICARE/i.test(l.linea));
+
   function render() {
     let h = "", lastSeg = null;
     R.forEach((r, i) => {
@@ -47,7 +49,8 @@ const Scheda = (() => {
       if (r.t === "loc") name = `<button type="button" data-i="${i}" aria-label="Apri ${esc(r.n)}">${esc(r.n)}</button>`;
       if (r.t === "m3" && PRESC) name = `<button type="button" data-presc="1">${esc(r.n)}</button>`;
       const ind = r.ind ? `<span class="ind" title="Indicatore di direzione dalla Scheda Treno">${esc(r.ind)}</span>` : "";
-      const aff = r.t === "loc" && AFFLOC[r.id] ? `<button class="affA" type="button" data-a="${i}" aria-label="Linee affiancate da ${esc(r.n)}">A</button>` : "";
+      const affList = AFFLOC?.[r.id], inDubbio = affInDubbio(affList);
+      const aff = r.t === "loc" && affList?.length ? `<button class="affA${inDubbio ? " affA-dubbio" : ""}" type="button" data-a="${i}" aria-label="${inDubbio ? "Linee affiancate in dubbio" : "Linee affiancate"}">A</button>` : "";
       const kp = String(r.km).split("/");
       const km = kp.length > 1 ? `<span>${esc(kp[0])}</span><span class="k2">${esc(kp[1])}</span>` : `<span>${esc(kp[0])}</span>`;
       h += `<div class="row ${r.t}" data-row="${i}"><span class="grado">${esc(r.g || "")}</span><span class="vel">${esc(r.v || "")}</span><span class="km">${km}</span><span class="name">${name}</span><span class="dircell">${ind}${aff}</span></div>`;
@@ -147,7 +150,7 @@ const Scheda = (() => {
   function affiancate(i, back) {
     const r = R[i], L = AFFLOC[r.id], a = AFF[r.s];
     const esito = a ? fact("Esito del tratto", esc(a.txt), a.src, a.st) : "";
-    if (L) return openSheet(shHead("Linee affiancate", `partono da ${r.n}`, back ? "loc:" + i : null) + `<div class="menu">${L.map((l, k) => `<button class="item" type="button" data-sig="${i}:${k}"><span>${esc(l.linea)}<br><small>${esc(l.tratto)} · ${esc(l.fl)}</small></span><span class="ind">${esc(l.ind)}</span></button>`).join("")}</div>` + esito);
+    if (L) return openSheet(shHead(affInDubbio(L) ? "Affiancata in dubbio – da verificare" : "Linee affiancate", `partono da ${r.n}`, back ? "loc:" + i : null) + `<div class="menu">${L.map((l, k) => `<button class="item" type="button" data-sig="${i}:${k}"><span>${esc(l.linea)}<br><small>${esc(l.tratto)} · ${esc(l.fl)}</small></span><span class="ind">${esc(l.ind)}</span></button>`).join("")}</div>` + esito);
     let corpo, nota;
     if (!a) {
       corpo = stItem("Linee affiancate del tratto", "linee affiancate", i);

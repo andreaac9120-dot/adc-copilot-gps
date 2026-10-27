@@ -10,6 +10,7 @@
   --f-disp: "Barlow Condensed", "Arial Narrow", sans-serif;
   --f-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --aff-dubbio: #F2C200;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -21,6 +22,7 @@
     --seg-bg: #162638; --seg-ink: #8ac5ff;
     --ok: #3dd68c; --warn: #ffaa1d; --unk: #8b9eb0; --inc: #c79bff; --danger: #e62e2e;
     --card-border: 1px solid #263445; --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); --zebra: #131b24;
+    --aff-dubbio: #E0B000;
     color-scheme: dark;
   }
 }
@@ -32,6 +34,7 @@
   --seg-bg: #162638; --seg-ink: #8ac5ff;
   --ok: #3dd68c; --warn: #ffaa1d; --unk: #8b9eb0; --inc: #c79bff; --danger: #e62e2e;
   --card-border: 1px solid #263445; --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); --zebra: #131b24;
+  --aff-dubbio: #E0B000;
   color-scheme: dark;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -116,6 +119,7 @@ details.field summary, .sum { cursor: pointer; font-weight: 700; color: var(--li
 .ind { font-family: var(--f-mono); font-size: 0.85rem; font-weight: 700; border: 1.5px solid var(--rule-strong); background: var(--paper-alt); color: var(--ink); border-radius: 5px; padding: 2px 7px; white-space: nowrap; }
 .affA { width: 2.15rem; height: 2.15rem; border: 2px solid #ffffff; outline: 1px solid var(--danger); background: var(--danger); color: #ffffff; font-family: var(--f-disp); font-weight: 700; font-size: 1.2rem; border-radius: 5px; cursor: pointer; line-height: 1; padding: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.25); }
 button:focus-visible, .file-btn:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+.affA.affA-dubbio { background: var(--aff-dubbio); color: #000000; outline-color: var(--aff-dubbio); }
 .row.loc .name button:active, .item:active, .chip:active, .affA:active, .studia:active, .close:active, .copy:active, .btn:active, .back:active { transform: scale(0.96); opacity: 0.85; }
 @media (prefers-reduced-motion: no-preference) {
   button, .btn { transition: transform 0.1s ease, opacity 0.1s ease, background-color 0.15s ease; }
