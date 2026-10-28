@@ -34,6 +34,8 @@ async function genImportaDb(file) {
     await DB.setConf("adcdb_info", { versione: d.versione, creato: d.creato, sha256: d.sha256, conteggi: d.conteggi, importato: new Date().toISOString() });
   } catch (err) { return toast("Salvataggio non riuscito: " + testoErrore(err)); }
   await genInfo();
+// spostamento una tantum dei viaggi senza IA salvati con la 1.0.17–1.0.19; poi si ridisegna la Home se è visibile
+migraSI().then(m => { if (m && !$("#home").hidden) home(); else genLista(); });
   toast(`Database ${d.versione} importato`);
 }
 
@@ -86,8 +88,8 @@ async function genGenera(btn) {
       fact("Percorso", esc(I.percorso), "", null),
       fact("Tratti", seg.split("<br>").map(esc).join("<br>"), "", null),
       fact("Da studiare", ap.length ? esc(ap.map(a => a.cosa).join(" · ")) : "nessun punto aperto", "", ap.length ? "N" : "V"),
-      `<div class="note">È una prova: confrontalo con il pacchetto di Claude. Se salvi, sostituisce il viaggio con lo stesso treno e data già nel telefono.</div>`,
-      `<div class="btns left"><button class="studia" type="button" data-gen="anteprima">Anteprima</button><button class="studia" type="button" data-gen="salva">Salva nei viaggi</button><button class="studia alt" type="button" data-gen="scarica">Scarica .adc.json</button></div>`
+      `<div class="note">È una prova: confrontalo con il pacchetto di Claude. Si salva nel riquadro «Viaggi senza IA salvati», separato da quelli di Claude.</div>`,
+      `<div class="btns left"><button class="studia" type="button" data-gen="anteprima">Anteprima</button><button class="studia" type="button" data-gen="salva">Salva nei viaggi senza IA</button><button class="studia alt" type="button" data-gen="scarica">Scarica .adc.json</button></div>`
     ], c.rapporto);
   } catch (err) {
     genEsito("Errore del generatore", "", [fact("Errore", esc(testoErrore(err)), "", "N")], GEN.rapporto);
@@ -100,18 +102,92 @@ function genAnteprima() {
   const p = GEN.ultimo; if (!p) return;
   closeSheet();
   for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
+  mostraSI(p);
+  toast("Anteprima: il pacchetto non è salvato");
+}
+// ---------- Archivio dei viaggi senza IA (1.0.20) ----------
+// I viaggi generati senza IA stanno in un archivio separato (DB «viaggi_si»): convivono con quelli di Claude
+// dello stesso treno e data, che restano nel riquadro «Viaggi salvati».
+const NOTA_SI = "Pacchetto generato dal software (database dati di linea)";
+function eSenzaIA(p) {
+  return !!(p && p.intestazione && typeof p.intestazione.nota === "string" && p.intestazione.nota.startsWith(NOTA_SI));
+}
+async function salvaSI(p, nome) {
+  const e = controlla(p);
+  if (e.length) return { err: `${nome}: ${e.slice(0, 6).join("; ")}` };
+  let v = null; try { v = await DB.getSI(p.id); } catch (_) {}
+  if (v && !confirm(`Tra i viaggi senza IA c'è già ${p.intestazione.treno} del ${p.intestazione.data_viaggio}. Sostituirlo?`)) return { err: `${nome}: non salvato (tenuto quello già presente)` };
+  const { immagini, ...q } = p;
+  q.importato = new Date().toISOString(); q.avvisi_import = [];
+  try { await DB.putSI(q); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
+  return { ok: true, id: p.id, avvisi: [], senzaIA: true };
+}
+// Viaggi senza IA salvati fino alla 1.0.19 nell'archivio di Claude: spostati una volta nel loro archivio.
+async function migraSI() {
+  let fatto = false; try { fatto = await DB.getConf("migrazione_si"); } catch (_) {}
+  if (fatto) return false;
+  let spostati = 0;
+  try {
+    for (const p of await DB.listViaggi()) {
+      if (!eSenzaIA(p)) continue;
+      let gia = null; try { gia = await DB.getSI(p.id); } catch (_) {}
+      if (!gia) await DB.putSI(p);
+      await DB.delViaggio(p.id);
+      spostati++;
+    }
+    await DB.setConf("migrazione_si", new Date().toISOString());
+  } catch (_) { /* si riprova al prossimo avvio */ }
+  return spostati > 0;
+}
+async function genLista() {
+  const el = $("#viaggiSI"); if (!el) return;
+  let V = []; try { V = await DB.listSI(); } catch (_) {}
+  V.sort((a, b) => dataId(b).localeCompare(dataId(a)) || String(a.id).localeCompare(String(b.id)));
+  el.innerHTML = V.length ? V.map(p => {
+    const id = String(p.id || ""), I = p.intestazione || {};
+    return `<div class="trip"><button class="item" type="button" data-gen="apri" data-id="${esc(id)}"><span><span class="tno">${esc(I.treno)}</span> <small class="tag-si">senza IA</small><br>${esc(I.percorso)}<br><small>${esc(I.data_viaggio)} · ${esc((I.loco || []).map(l => l.etichetta).join(", "))}${p.aperti && p.aperti.length ? ` · ${p.aperti.length} da studiare` : ""}</small></span><small>apri ›</small></button>
+      <button class="del" type="button" data-gen="elimina" data-id="${esc(id)}" aria-label="Elimina ${esc(I.treno)}">Elimina</button></div>`;
+  }).join("") : `<div class="note">Nessun viaggio senza IA salvato. Genera un pacchetto qui sopra e tocca «Salva nei viaggi senza IA».</div>`;
+}
+async function apriSI(id) {
+  const p = await DB.getSI(id);
+  if (!p) return toast("Viaggio non trovato");
+  const e = (() => { try { return controlla(p); } catch (err) { return [testoErrore(err)]; } })();
+  if (e.length) return openSheet(shHead("Viaggio non leggibile", id) + e.slice(0, 8).map(x => fact("Problema", esc(x), "", "N")).join(""));
+  mostraSI(p);
+  if (location.hash !== "#s=" + id) history.pushState({ s: id }, "", "#s=" + id);
+}
+function mostraSI(p) {
+  closeSheet();
+  for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
   try { Scheda.show(p, {}); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
+  $("#vNota").textContent = "SENZA IA · " + $("#vNota").textContent;
   $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
-  toast("Anteprima: il pacchetto non è salvato");
+}
+async function eliminaSI(id) {
+  const p = await DB.getSI(id);
+  if (!confirm(`Eliminare il viaggio senza IA ${p ? p.intestazione.treno + " del " + p.intestazione.data_viaggio : id}?`)) return;
+  try { await DB.delSI(id); toast("Viaggio eliminato"); } catch (err) { toast("Eliminazione non riuscita: " + testoErrore(err)); }
+  genLista();
+}
+async function esportaSI(id) {
+  const p = await DB.getSI(id); if (!p) return;
+  const { importato, avvisi_import, ...q } = p;
+  scaricaJSON(q, id);
+}
+function scaricaJSON(p, id) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 1)], { type: "application/json" }));
+  a.download = `${String(id).replace(/[^0-9A-Za-z_-]/g, "_")}.adc.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 async function genSalva() {
   const p = GEN.ultimo; if (!p) return;
-  const v = await DB.getViaggio(p.id);
-  if (v && !confirm(`Nel telefono c'è già il viaggio ${p.intestazione.treno} del ${p.intestazione.data_viaggio} (rev. ${v.revisione}). Sostituirlo con il pacchetto generato senza IA?`)) return;
-  const r = await importaTesto(JSON.stringify(p), `${p.id}.adc.json`);
+  const r = await salvaSI(p, `${p.id}.adc.json`);
   if (r.err) return openSheet(shHead("Non salvato", p.id) + fact("Problema", esc(r.err), "", "N"));
-  await home(); apri(r.id);
+  await genLista(); apriSI(r.id);
 }
 function genScarica() {
   const p = GEN.ultimo; if (!p) return;
@@ -129,8 +205,13 @@ document.addEventListener("click", e => {
   if (g === "anteprima") return genAnteprima();
   if (g === "salva") return genSalva();
   if (g === "scarica") return genScarica();
+  if (g === "apri") return apriSI(t.dataset.id);
+  if (g === "elimina") return eliminaSI(t.dataset.id);
+  if (g === "esporta") return esportaSI(t.dataset.id);
 });
 document.addEventListener("change", e => {
   if (e.target && e.target.id === "fDb") { const f = e.target.files[0]; e.target.value = ""; if (f) genImportaDb(f); }
 });
 genInfo();
+// spostamento una tantum dei viaggi senza IA salvati con la 1.0.17–1.0.19; poi si ridisegna la Home se è visibile
+migraSI().then(m => { if (m && !$("#home").hidden) home(); else genLista(); });

@@ -268,3 +268,7 @@ footer{line-height:1.65}
 :root[data-screen="tablet"] .wrap{max-width:1240px}
 @media(min-width:700px){:root[data-screen="tablet"] .colhead,:root[data-screen="tablet"] .row{grid-template-columns:3rem 6rem 7rem minmax(0,1fr) auto;column-gap:16px}:root[data-screen="tablet"] .row{min-height:68px}:root[data-screen="tablet"] .row .name button{font-size:1.15rem}:root[data-screen="tablet"] .row .vel{font-size:1.1rem}:root[data-screen="tablet"] .km{font-size:1rem}}
 @media(orientation:landscape){:root[data-screen="phone"] .wrap{max-width:960px}body{padding-top:12px}.gps-panel{gap:10px}}
+
+/* 1.0.20 – viaggi senza IA */
+.sub-h { margin: 18px 0 6px; font-size: 1rem; font-weight: 700; color: var(--ink); }
+.tag-si { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1.5px solid var(--accent); color: var(--ink); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }

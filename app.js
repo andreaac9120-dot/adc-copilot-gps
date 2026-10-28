@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.19";
+const VERSION = "1.0.20";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -254,6 +254,8 @@ async function importaTesto(txt, nome) {
   if (eBlocco(p)) return importaBlocco(p, nome);
   const e = controlla(p);
   if (e.length) return { err: `${nome}: ${e.slice(0, 10).join("; ")}${e.length > 10 ? ` (e altri ${e.length - 10} problemi)` : ""}` };
+  // 1.0.20 – un pacchetto generato senza IA va nel suo archivio (riquadro «Generatore senza IA»)
+  if (typeof eSenzaIA === "function" && eSenzaIA(p)) return salvaSI(p, nome);
   const vecchio = await DB.getViaggio(p.id);
   // 1.0.13 – pacchetto di sola condotta su un viaggio che nel telefono ha già la formazione (unita dal blocco):
   // il confronto delle revisioni si fa con la revisione della condotta, perché l'unione del blocco l'ha già alzata.
@@ -411,7 +413,7 @@ async function importaFiles(files) {
       falliti.map(x => fact("Non importato", esc(x.err), "", "N")).join("") +
       fatti.map(x => fact("Importato", esc(x.nome), "", "V")).join("") +
       avv.map(a => fact("Attenzione", esc(a), "", "I")).join(""));
-  else if (fatti.length) { toast(fatti.length === 1 ? "Viaggio importato" : `${fatti.length} viaggi importati`); if (fatti.length === 1) apri(fatti[0].id); }
+  else if (fatti.length) { toast(fatti.length === 1 ? "Viaggio importato" : `${fatti.length} viaggi importati`); if (fatti.length === 1) (fatti[0].senzaIA ? apriSI : apri)(fatti[0].id); }
   return esiti;
 }
 
@@ -475,6 +477,7 @@ async function home() {
   const M = buoni.flatMap(p => (p.aperti || []).map(a => ({ ...a, treno: p.intestazione.treno, vid: p.id })));
   $("#messaggi").innerHTML = M.length ? M.map(a => `<div class="item row-st"><span><b>${esc(a.treno)}</b> · ${esc(a.cosa)}<br><small>${esc(LAB_MOTIVO[a.motivo] || "da studiare")}</small></span><span class="btns">${a.motivo === "attesa_massa_treno" ? `<button class="studia alt" type="button" data-docfor="${esc(a.vid)}">Allega doc.</button>` : ""}<button class="studia" type="button" data-req="${esc(a.richiesta)}" data-proj="${projDi(a)}">Studia</button></span></div>`).join("")
     : `<div class="note">Nessun punto aperto nei viaggi salvati. I messaggi completi di Claude restano nella chat del progetto.</div>`;
+  if (typeof genLista === "function") genLista();
   try { const e = await navigator.storage.estimate(); $("#storeInfo").textContent = `Spazio usato nel telefono: ${(e.usage / 1048576).toFixed(1)} MB.`; } catch (_) {}
   await sospesi();
 }
@@ -619,7 +622,7 @@ document.addEventListener("visibilitychange", () => {
   if (typeof GPS !== "undefined") GPS.visibilityChanged();
 });
 addEventListener("online", net); addEventListener("offline", net);
-addEventListener("popstate", () => { const m = location.hash.match(/^#v=(.+)$/); m ? apri(decodeURIComponent(m[1])) : home(); });
+addEventListener("popstate", () => { const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/); m ? apri(decodeURIComponent(m[1])) : s ? apriSI(decodeURIComponent(s[1])) : home(); });
 
 // ---------- Offline e aggiornamenti (R01, R02) ----------
 // La nuova versione si scarica intera in sottofondo e si attiva solo quando tocchi "Aggiorna":
@@ -658,5 +661,6 @@ async function registraSW() {
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (_) {}
   await home();
   if (new URLSearchParams(location.search).has("condivisi")) await importaCondivisi();
-  const m = location.hash.match(/^#v=(.+)$/); if (m) apri(decodeURIComponent(m[1]));
+  const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/);
+  if (m) apri(decodeURIComponent(m[1])); else if (s && typeof apriSI === "function") apriSI(decodeURIComponent(s[1]));
 })();
