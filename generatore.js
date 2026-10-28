@@ -47,12 +47,14 @@ async function genGenera(btn) {
   let T = null; try { T = await DB.getConf("adcdb"); } catch (_) {}
   if (!T) return toast("Importa prima il database dati di linea");
   const testo = $("#gTraccia").value.trim();
-  if (!testo) { $("#gTraccia").focus(); return toast("Incolla la traccia Softrail: serve sempre"); }
   const f = $("#gScheda").files[0] || null;
+  const locoUtente = $("#gLoco").value.trim();
+  if (!testo && !f) { $("#gTraccia").focus(); return toast("Serve la traccia Softrail o la Scheda Treno"); }
+  if (locoUtente && !Componi.tipoLoco(locoUtente)) { $("#gLoco").focus(); return toast("Locomotiva non riconosciuta: scrivi ad es. E494 o E494.504"); }
   GEN.occupato = true; const etichetta = btn.innerHTML; btn.disabled = true; btn.textContent = f ? "Lettura della Scheda Treno…" : "Generazione…";
   try {
-    const Tr = LeggiTraccia.leggi(testo);
-    if (!Tr.treni.length || !Tr.tratte.length)
+    const Tr = testo ? LeggiTraccia.leggi(testo) : null;
+    if (Tr && (!Tr.treni.length || !Tr.tratte.length))
       return genEsito("Traccia non leggibile", "serve la notifica Softrail «Info treno»", [fact("Problema", esc(Tr.controlli.join("; ") || "nessuna tratta trovata"), "", "N")]);
     let S = null;
     if (f) {
@@ -64,12 +66,17 @@ async function genGenera(btn) {
       if (!S.pagine.length)
         return genEsito("Scheda Treno non riconosciuta", f.name, [fact("Problema", "Il PDF non contiene pagine «Scheda Treno» del modulo SKT-M3M40.", "", "N")]);
     }
-    const c = Componi.componi(T, Tr, S);
+    // Locomotiva: campo compilato → quella; vuoto → quella della traccia; senza traccia → quella scritta nella Scheda (con avviso)
+    const c = Componi.componi(T, Tr, S, locoUtente);
     GEN.rapporto = c.rapporto;
-    if (!c.ok) return genEsito("Itinerario non ricostruito", `treno ${Tr.treni.join("/")}`, [fact("Esito", "Nessun tratto riconosciuto nel database: le linee di questo treno non sono ancora state caricate.", "", "N")], c.rapporto);
+    if (c.errore) return genEsito("Pacchetto non generato", "", [fact("Errore", esc(c.errore), "", "N")], c.rapporto);
+    const nomeTreno = c.viaggio.treno_testo || c.viaggio.treno;
+    if (!c.viaggio.data || !c.viaggio.treno || c.viaggio.treno === "?")
+      return genEsito("Treno non identificato", "", [fact("Problema", "Numero treno o data non leggibili: incolla anche la traccia.", "", "N")], c.rapporto);
+    if (!c.ok) return genEsito("Itinerario non ricostruito", `treno ${nomeTreno}`, [fact("Esito", "Nessun tratto riconosciuto nel database: le linee di questo treno non sono ancora state caricate.", "", "N")], c.rapporto);
     let p;
     try { p = Genera.genera(T, c.viaggio); }
-    catch (err) { return genEsito("Pacchetto non generato", `treno ${Tr.treni.join("/")}`, [fact("Errore", esc(err.message || String(err)), "", "N")], c.rapporto); }
+    catch (err) { return genEsito("Pacchetto non generato", `treno ${nomeTreno}`, [fact("Errore", esc(err.message || String(err)), "", "N")], c.rapporto); }
     const e = controlla(p);
     if (e.length) return genEsito("Pacchetto non valido", p.id, e.slice(0, 8).map(x => fact("Problema", esc(x), "", "N")), c.rapporto);
     GEN.ultimo = p;

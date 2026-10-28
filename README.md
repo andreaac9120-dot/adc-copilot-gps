@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.18 — versione unica
+# ADC COPILOT 1.0.19 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,7 +8,9 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
-## Generatore senza IA (prova, 1.0.17–1.0.18)
+## Generatore senza IA (prova, 1.0.17–1.0.19)
+
+1.0.19: la traccia non è più obbligatoria. Con la sola Scheda Treno numeri treno e data vengono dalla Scheda (numero di ogni pagina, «Valida per il treno del») e il confronto traccia ⇆ Scheda non si fa. Campo **Locomotiva**: se compilato vale quello (es. E494 o E494.504); se vuoto vale la locomotiva della traccia; senza traccia quella scritta nella Scheda (mezzo intestatario della sigla), con avviso nel rapporto perché può non essere quella che traina il treno.
 
 1.0.18: indicatore del treno come nel generatore del database aggiornato (la stessa cifra su due segnali della località vale una volta). Serve con il database del 28/10/2026 ore 16:05 o successivo.
 
