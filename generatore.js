@@ -20,6 +20,76 @@ async function genInfo() {
   el.innerHTML = i
     ? `Database dati di linea <b>${esc(i.versione)}</b> · ${esc(i.conteggi.linee)} linee, ${esc(i.conteggi.localita)} località · importato il ${esc(dataOra(i.importato))}`
     : "Nessun database nel telefono: importa il file <b>.adcdb.json</b> che ti consegna Claude (non è pubblico).";
+  const ei = $("#genImg"); if (!ei) return;
+  let f = null; try { f = await DB.getConf("pagine_fl_info"); } catch (_) {}
+  const v = Object.entries(f || {}).sort((a, b) => a[0].localeCompare(b[0]));
+  ei.innerHTML = v.length
+    ? `Pagine FL nel telefono: <b>${v.reduce((n, [, x]) => n + x.conteggio, 0)}</b> (${v.map(([k, x]) => `${esc(k.replace(/_.*/, ""))} ${esc(x.conteggio)}`).join(", ")})`
+    : "Nessuna pagina FL nel telefono: importa i file <b>.adcimg.json</b> (fiancate e schemi unifilari) per vederle nel fumetto.";
+}
+
+// ---------- Pagine FL (1.0.21) ----------
+// File .adcimg.json (repository privato adc-copilot-db): pagine di un FL come immagini, comuni a tutti i viaggi.
+const RE_PFL = /^img\/fl\d+_p[0-9A-Za-z_.-]+\.jpg$/;
+async function importaPagineFL(d, nome) {
+  if (!d || d.formato !== "adc-copilot-pagine-fl") return { err: `${nome}: non è un file di pagine FL` };
+  if (d.versione_formato !== 1) return { err: `${nome}: versione del formato ${d.versione_formato} non supportata da questa app` };
+  if (typeof d.fonte !== "string" || !/^[A-Z0-9_]{2,30}$/.test(d.fonte) || typeof d.versione !== "string" || !/^\d{8}-\d{4}$/.test(d.versione))
+    return { err: `${nome}: fonte o versione mancante` };
+  if (!d.pagine || typeof d.pagine !== "object" || Array.isArray(d.pagine)) return { err: `${nome}: pagine mancanti` };
+  const chiavi = Object.keys(d.pagine).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (!chiavi.length || chiavi.length !== d.conteggio) return { err: `${nome}: numero di pagine diverso da quello dichiarato` };
+  for (const k of chiavi) {
+    const v = d.pagine[k];
+    if (!RE_PFL.test(k) || typeof v !== "string" || v.length > MAX_IMG || !v.startsWith("data:image/jpeg;base64,")) return { err: `${nome}: pagina ${k.slice(0, 60)} non valida` };
+  }
+  if (await AdcDb.sha256(chiavi.map(k => k + "\n" + d.pagine[k] + "\n").join("")) !== d.sha256) return { err: `${nome}: impronta SHA-256 diversa: file rovinato o modificato` };
+  let info = null; try { info = await DB.getConf("pagine_fl_info"); } catch (_) {}
+  info = info || {};
+  const prima = info[d.fonte];
+  if (prima && prima.versione > d.versione && !confirm(`Nel telefono ci sono le pagine ${d.fonte} ${prima.versione}, più recenti di ${d.versione}. Sostituirle?`))
+    return { err: `${nome}: non importato (tenute le pagine più recenti)` };
+  const blobs = {};
+  for (const k of chiavi) {
+    try { blobs[k] = await immagineDa(d.pagine[k]); } catch (_) { return { err: `${nome}: pagina ${k} rovinata, file non importato` }; }
+  }
+  try {
+    await DB.putPagineFL(prima ? prima.pagine || [] : [], blobs);
+    info[d.fonte] = { versione: d.versione, edizione: d.edizione || "", conteggio: chiavi.length, sha256: d.sha256, importato: new Date().toISOString(), pagine: chiavi };
+    await DB.setConf("pagine_fl_info", info);
+  } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
+  await genInfo();
+  return { ok: true, msg: `Pagine ${d.fonte}: ${chiavi.length} importate` };
+}
+async function genImportaImg(files) {
+  const esiti = [];
+  for (const f of files) {
+    const nome = f.name || "file";
+    let r;
+    try { r = await importaPagineFL(JSON.parse(await f.text()), nome); } catch (err) { r = { err: `${nome}: ${err instanceof SyntaxError ? "file non leggibile (JSON non valido)" : testoErrore(err)}` }; }
+    esiti.push(r);
+  }
+  const ok = esiti.filter(x => x.ok), ko = esiti.filter(x => x.err);
+  if (ko.length) openSheet(shHead("Pagine FL", `${ok.length} importati · ${ko.length} non importati`) +
+    ko.map(x => fact("Non importato", esc(x.err), "", "N")).join("") + ok.map(x => fact("Importato", esc(x.msg), "", "V")).join(""));
+  else if (ok.length) toast(ok.length === 1 ? ok[0].msg : `${ok.length} file di pagine FL importati`);
+}
+// URL delle pagine FL usate dal pacchetto, lette dall'archivio del telefono
+async function urlPagineFL(p) {
+  const out = {};
+  const usate = new Set(Object.values(p.condotta.FLPAG || {}).flatMap(g => g.pag.map(x => x.img)));
+  for (const path of usate) { try { const b = await DB.getImg("fl", path); if (b) out[path] = URL.createObjectURL(b); } catch (_) {} }
+  return out;
+}
+// Pacchetto da scaricare: con le pagine FL incorporate, così si apre anche in un altro telefono
+async function conPagineFL(p) {
+  const usate = new Set(Object.values(p.condotta.FLPAG || {}).flatMap(g => g.pag.map(x => x.img)));
+  const imm = {};
+  for (const path of usate) {
+    let b = null; try { b = await DB.getImg("fl", path); } catch (_) {}
+    if (b) imm[path] = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+  }
+  return Object.keys(imm).length ? { ...p, immagini: imm } : p;
 }
 
 async function genImportaDb(file) {
@@ -77,7 +147,8 @@ async function genGenera(btn) {
       return genEsito("Treno non identificato", "", [fact("Problema", "Numero treno o data non leggibili: incolla anche la traccia.", "", "N")], c.rapporto);
     if (!c.ok) return genEsito("Itinerario non ricostruito", `treno ${nomeTreno}`, [fact("Esito", "Nessun tratto riconosciuto nel database: le linee di questo treno non sono ancora state caricate.", "", "N")], c.rapporto);
     let p;
-    try { p = Genera.genera(T, c.viaggio); }
+    let disp = new Set(); try { disp = new Set(await DB.chiaviPagineFL()); } catch (_) {}
+    try { p = Genera.genera(T, c.viaggio, undefined, disp); }
     catch (err) { return genEsito("Pacchetto non generato", `treno ${nomeTreno}`, [fact("Errore", esc(err.message || String(err)), "", "N")], c.rapporto); }
     const e = controlla(p);
     if (e.length) return genEsito("Pacchetto non valido", p.id, e.slice(0, 8).map(x => fact("Problema", esc(x), "", "N")), c.rapporto);
@@ -157,10 +228,11 @@ async function apriSI(id) {
   mostraSI(p);
   if (location.hash !== "#s=" + id) history.pushState({ s: id }, "", "#s=" + id);
 }
-function mostraSI(p) {
+async function mostraSI(p) {
   closeSheet();
   for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
-  try { Scheda.show(p, {}); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
+  imgURLs = await urlPagineFL(p);
+  try { Scheda.show(p, imgURLs); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
   $("#vNota").textContent = "SENZA IA · " + $("#vNota").textContent;
   $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
@@ -176,9 +248,10 @@ async function esportaSI(id) {
   const { importato, avvisi_import, ...q } = p;
   scaricaJSON(q, id);
 }
-function scaricaJSON(p, id) {
+async function scaricaJSON(p, id) {
+  let q = p; try { q = await conPagineFL(p); } catch (_) {}
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 1)], { type: "application/json" }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(q, null, 1)], { type: "application/json" }));
   a.download = `${String(id).replace(/[^0-9A-Za-z_-]/g, "_")}.adc.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
@@ -191,11 +264,7 @@ async function genSalva() {
 }
 function genScarica() {
   const p = GEN.ultimo; if (!p) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 1)], { type: "application/json" }));
-  a.download = `${p.id.replace(/[^0-9A-Za-z_-]/g, "_")}.adc.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  scaricaJSON(p, p.id);
 }
 
 document.addEventListener("click", e => {
@@ -211,6 +280,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("change", e => {
   if (e.target && e.target.id === "fDb") { const f = e.target.files[0]; e.target.value = ""; if (f) genImportaDb(f); }
+  if (e.target && e.target.id === "fImg") { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) genImportaImg(fs); }
 });
 genInfo();
 // spostamento una tantum dei viaggi senza IA salvati con la 1.0.17–1.0.19; poi si ridisegna la Home se è visibile

@@ -7,7 +7,7 @@
 (function (root) {
   "use strict";
   const C = typeof module !== "undefined" && module.exports ? require("./comune.js") : root.MotoreComune;
-  const { f3, fg, pyFloat, unici, get } = C;
+  const { f3, fg, pyFloat, unici, get, has } = C;
 
   const ORDINE = { V: 3, R: 2, I: 1, N: 0 };
   const EPS = 0.0005;
@@ -69,7 +69,8 @@
   const numeri = u => [u.gsmr ? `GSM-R ${u.gsmr}` : "", u.fs ? `FS ${u.fs}` : "", u.altro || ""].filter(x => x).join(" · ");
 
   // T: tabelle del database; V: viaggio (componi); ora: data di creazione (facoltativa)
-  function genera(T, V, ora) {
+  // imgDisp: Set dei percorsi img/… delle pagine FL presenti nel telefono (facoltativo)
+  function genera(T, V, ora, imgDisp) {
     const db = Database(T);
     const aperti = [], fontiUsate = [];
     const usa = f => { if (!fontiUsate.includes(f)) fontiUsate.push(f); };
@@ -335,10 +336,36 @@
       if (gp && gp.st === "V") GEO[o.id] = { lat: gp.lat, lon: gp.lon, src: gp.src, st: "V" };
     }
 
-    // ------------------------------------------------------------- pagine FL: nella PWA le immagini non ci sono
+    // ------------------------------------------------------------- pagine FL (solo quelle le cui immagini sono nel telefono)
+    // Per ogni linea e senso (tutte le pagine della linea, senza filtro km): gruppo "fianc" (fiancate principali
+    // sx/dx, poi fiancata di linea) e gruppo "schema". Le immagini restano nell'archivio del telefono: qui solo i percorsi.
     const FLPAG = {}, FLLOC = {}, immagini = {};
-    aperti.push({ cosa: "Pagine FL del fumetto (fiancata principale e schema unifilare)", motivo: "da_studiare",
-      richiesta: `Allegare le immagini delle pagine FL nel database (tabella pagine_fl) – ${TRENO}` });
+    const DESCR = { principale: "principale", principale_sx: "principale sinistro", principale_dx: "principale destro",
+      fiancata_linea: "fiancata di linea", schema: "schema unifilare" };
+    const senza = [], vuoti = new Set();
+    const cImg = p => !!(imgDisp && imgDisp.has(p.img));
+    for (const o of occ) {
+      const t = o.out || o.inn, L = t.linea, s = t.senso;
+      const rr = T.pagine_fl.filter(p => p.linea_id === L.linea_id && (p.senso === s || p.senso === "entrambi") && p.img !== null && p.img !== undefined);
+      for (const [chiave, tipi] of [["fianc", ["principale", "principale_sx", "principale_dx", "fiancata_linea"]], ["schema", ["schema"]]]) {
+        const k = `${L.linea_id}_${s}_${chiave}`;
+        if (!has(FLPAG, k) && !vuoti.has(k)) {
+          const sel = rr.filter(p => tipi.includes(p.tipo)).sort((a, b) =>
+            ((a.tipo === "fiancata_linea") - (b.tipo === "fiancata_linea")) || cmpStr(a.fonte, b.fonte) ||
+            ((a.pag_pdf || 0) - (b.pag_pdf || 0)) || cmpStr(a.img, b.img));
+          const pag = sel.filter(cImg).map(p => ({ t: `${p.pag} ${DESCR[p.tipo]}`, img: p.img, src: db.src(p.fonte, p.pag) }));
+          if (!pag.length) { vuoti.add(k); continue; }
+          for (const p of sel) usa(p.fonte);
+          const tit = chiave === "fianc" ? "fiancate" : "schema unifilare";
+          FLPAG[k] = { titolo: `${SEG[t.lettera].fl} – ${L.nome_breve}, senso ${s} – ${tit}`, pag };
+        }
+        if (has(FLPAG, k)) (FLLOC[o.id] = FLLOC[o.id] || {})[chiave] = k;
+      }
+      if (!["fianc", "schema"].some(c => has(FLPAG, `${L.linea_id}_${s}_${c}`)) && !senza.includes(L.nome_breve)) senza.push(L.nome_breve);
+    }
+    if (senza.length)
+      aperti.push({ cosa: "Pagine FL del fumetto (fiancata principale e schema unifilare): " + senza.join(", "), motivo: "da_studiare",
+        richiesta: `Importare le pagine FL (file .adcimg.json) o caricarle nel database (tabella pagine_fl) – ${TRENO}` });
 
     // ------------------------------------------------------------- pacchetto
     const fonti = fontiUsate.map(f => { const r = db.fonti.get(f); return { doc: r.documento, edizione: r.edizione, uso: r.note || "" }; });
