@@ -3,10 +3,12 @@
 // Ogni versione scarica la shell completa in una cache nuova e la attiva solo su conferma dell'utente (R01).
 // A ogni rilascio cambia VER: è ciò che fa vedere al telefono che c'è una versione nuova.
 const NS = "adc-copilot-gps-";
-const VER = NS + "shell-1.0.16";
+const VER = NS + "shell-1.0.17";
 const FONT = NS + "font";
 const CONDIVISI = NS + "condivisi";
-const SHELL = ["./", "index.html", "style.css", "db.js", "scheda.js", "gps.js", "app.js", "screen.js", "manifest.webmanifest", "icon-192.png?v=20261024", "icon-512.png?v=20261024", "icon-maskable-512.png?v=20261024"];
+const SHELL = ["./", "index.html", "style.css", "db.js", "scheda.js", "gps.js", "app.js", "screen.js", "generatore.js",
+  "motore/comune.js", "motore/pdfparole.js", "motore/leggi_scheda.js", "motore/leggi_traccia.js", "motore/componi.js", "motore/genera.js", "motore/adcdb.js",
+  "vendor/pdfjs/pdf.min.mjs", "vendor/pdfjs/pdf.worker.min.mjs", "manifest.webmanifest", "icon-192.png?v=20261024", "icon-512.png?v=20261024", "icon-maskable-512.png?v=20261024"];
 // Non cancella cache di altre app sullo stesso dominio (es. la vecchia 1.0.2, se ancora installata).
 const VECCHIA = k => false;
 
