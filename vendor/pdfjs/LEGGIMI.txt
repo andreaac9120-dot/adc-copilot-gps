@@ -1,0 +1,3 @@
+pdf.js (Mozilla) — pacchetto pdfjs-dist 6.2.108, build "legacy" (browser meno recenti).
+Licenza Apache 2.0 (file LICENSE). File copiati senza modifiche: pdf.min.mjs, pdf.worker.min.mjs.
+Usato solo per leggere il testo della Scheda Treno PDF nel generatore senza IA.

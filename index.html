@@ -64,6 +64,22 @@
       </div>
     </section>
 
+    <!-- Generatore senza IA (prova, 1.0.17): non cambia lo studio con Claude qui sopra -->
+    <section class="card" aria-labelledby="hGen">
+      <div class="card-head"><h2 id="hGen">Generatore senza IA (prova)</h2>
+        <label class="btn file-btn">Importa database<input type="file" id="fDb" accept=".json,.adcdb.json,application/json" hidden></label>
+      </div>
+      <p class="note">Crea il pacchetto direttamente nel telefono, senza Claude e senza rete, con i dati di linea del database. Funziona solo sulle linee già caricate nel database. È una prova da confrontare con il pacchetto di Claude: lo studio delle linee si fa sempre con i tasti qui sopra.</p>
+      <p class="note" id="genDb"></p>
+      <label class="field"><span>Traccia (Softrail Info treno, obbligatoria)</span>
+        <textarea id="gTraccia" rows="5" placeholder="Incolla qui la notifica con le tratte tra località…"></textarea></label>
+      <label class="field"><span>Scheda Treno (PDF Railmobile, facoltativa)</span>
+        <input type="file" id="gScheda" accept="application/pdf,.pdf"></label>
+      <div class="actions">
+        <button class="btn primary" type="button" data-gen="genera">Genera pacchetto<small>Senza IA, dal database nel telefono</small></button>
+      </div>
+    </section>
+
     <p class="note">Versione app <span id="ver"></span> · pacchetto unico v1 (scheda 16c). I viaggi restano solo in questo telefono. <span id="offInfo"></span></p>
     <footer>Strumento di consultazione: fanno fede la Scheda Treno ufficiale, le prescrizioni ricevute e i documenti in vigore.</footer>
   </main>
@@ -117,6 +133,14 @@
 <script src="gps.js"></script>
 <script src="app.js"></script>
 <script src="screen.js"></script>
+<script src="motore/comune.js"></script>
+<script src="motore/pdfparole.js"></script>
+<script src="motore/leggi_scheda.js"></script>
+<script src="motore/leggi_traccia.js"></script>
+<script src="motore/componi.js"></script>
+<script src="motore/genera.js"></script>
+<script src="motore/adcdb.js"></script>
+<script src="generatore.js"></script>
 </body>
 </html>
 

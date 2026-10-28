@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.16 — versione unica
+# ADC COPILOT 1.0.17 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -7,6 +7,14 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Sito: https://andreaac9120-dot.github.io/adc-copilot-gps/
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
+
+## Generatore senza IA (prova, 1.0.17)
+
+Nuova sezione in Home, **separata** dallo studio con Claude (i tasti Studio linea condotta/formazione e Studia non cambiano).
+- **Importa database**: carica il file `adc_linee_<versione>.adcdb.json` del repository **privato** `adc-copilot-db`. L'app controlla formato e impronta SHA-256 e lo salva solo nel telefono (IndexedDB, `conf`). Questa repository è pubblica e **non contiene dati di linea**.
+- **Genera pacchetto**: traccia Softrail (obbligatoria) + Scheda Treno PDF (facoltativa) → lettori → composizione dell'itinerario → generatore → pacchetto `.adc.json` controllato con le regole 1.0.4. Poi: Anteprima (non salva), Salva nei viaggi (chiede conferma se il viaggio esiste già), Scarica.
+- Tutto offline. Il codice in `motore/` è la traduzione fedele dei programmi Python del database (stessi ingressi → stesso pacchetto, verificato sul treno 51455 del 28/10/2026 e sui viaggi di prova). La Scheda PDF si legge con pdf.js (`vendor/pdfjs`, Apache 2.0) riproducendo le regole di pdfplumber.
+- Funziona solo sulle linee caricate nel database; ciò che manca diventa stato N e punto aperto. Pagine FL (immagini) non incluse.
 
 ## Grafica e Schermo (1.0.16)
 
