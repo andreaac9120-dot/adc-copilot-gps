@@ -1,6 +1,6 @@
 // Archivio locale dei viaggi (IndexedDB). Nulla lascia il telefono.
 const DB = (() => {
-  const NAME = "adc-copilot-gps", VER = 1;
+  const NAME = "adc-copilot-gps", VER = 2; // 2 (1.0.20): archivio separato dei viaggi generati senza IA
   let dbp = null;
   function open() {
     if (dbp) return dbp;
@@ -11,6 +11,7 @@ const DB = (() => {
         if (!d.objectStoreNames.contains("viaggi")) d.createObjectStore("viaggi", { keyPath: "id" });
         if (!d.objectStoreNames.contains("img")) d.createObjectStore("img"); // chiave "id|img/..." → Blob
         if (!d.objectStoreNames.contains("conf")) d.createObjectStore("conf");
+        if (!d.objectStoreNames.contains("viaggi_si")) d.createObjectStore("viaggi_si", { keyPath: "id" }); // viaggi senza IA
       };
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
@@ -42,6 +43,11 @@ const DB = (() => {
       tx.objectStore("img").delete(IDBKeyRange.bound(id + "|", id + "|￿"));
       return done(tx);
     },
+    // Viaggi generati senza IA: archivio separato, così convivono con quelli di Claude dello stesso treno e data
+    async listSI() { const [, s] = await store("viaggi_si", "readonly"); return req(s.getAll()); },
+    async getSI(id) { const [, s] = await store("viaggi_si", "readonly"); return req(s.get(id)); },
+    async putSI(p) { const [tx, s] = await store("viaggi_si", "readwrite"); s.put(p); return done(tx); },
+    async delSI(id) { const [tx, s] = await store("viaggi_si", "readwrite"); s.delete(id); return done(tx); },
     async getConf(k) { const [, s] = await store("conf", "readonly"); return req(s.get(k)); },
     async setConf(k, v) { const [tx, s] = await store("conf", "readwrite"); s.put(v, k); return done(tx); }
   };
