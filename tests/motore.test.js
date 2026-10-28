@@ -52,3 +52,19 @@ test("database importato: impronta controllata", async () => {
   d.tabelle.linee[0].nome = "cambiato";
   assert.match((await A.controlla(JSON.stringify(d))).err, /impronta/);
 });
+
+test("solo Scheda Treno: numeri e data dalla Scheda, locomotiva dal campo o dalla Scheda", () => {
+  const S = () => ({ intestazione: { treno: "12345", valida_per: "03/11/2026", mezzo_sigla: "E436", sigla: "M100A", freno: "P75%", fl: [] },
+    pagine: [{ treno: "12345" }], controlli: [], moduli: [],
+    righe: [{ nome: "Alfa", tipo: "loc", km: ["0.000"] }, { nome: "Beta", tipo: "loc", km: ["10.000"] }] });
+  const a = Co.componi(T, null, S());
+  assert.ok(a.ok, a.rapporto.join("\n"));
+  assert.equal(a.viaggio.data, "2026-11-03");
+  assert.equal(a.viaggio.loco[0].tipo, "E436");
+  assert.ok(a.rapporto.some(r => r.includes("LOCOMOTIVA presa dalla Scheda")));
+  const b = Co.componi(T, null, S(), "E494.504");
+  assert.deepEqual({ ...b.viaggio.loco[0] }, { tipo: "E494", etichetta: "E494.504" });
+  const p = G.genera(T, b.viaggio, new Date("2026-11-03T08:00:00Z"));
+  assert.equal(controlla(JSON.parse(JSON.stringify(p))).length, 0);
+  assert.equal(Co.componi(T, null, S(), "zz").ok, false);
+});

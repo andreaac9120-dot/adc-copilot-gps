@@ -71,10 +71,12 @@
       </div>
       <p class="note">Crea il pacchetto direttamente nel telefono, senza Claude e senza rete, con i dati di linea del database. Funziona solo sulle linee già caricate nel database. È una prova da confrontare con il pacchetto di Claude: lo studio delle linee si fa sempre con i tasti qui sopra.</p>
       <p class="note" id="genDb"></p>
-      <label class="field"><span>Traccia (Softrail Info treno, obbligatoria)</span>
+      <label class="field"><span>Traccia (Softrail Info treno; facoltativa se scegli la Scheda Treno)</span>
         <textarea id="gTraccia" rows="5" placeholder="Incolla qui la notifica con le tratte tra località…"></textarea></label>
       <label class="field"><span>Scheda Treno (PDF Railmobile, facoltativa)</span>
         <input type="file" id="gScheda" accept="application/pdf,.pdf"></label>
+      <label class="field"><span>Locomotiva (facoltativa: se vuota, quella della traccia o, senza traccia, quella scritta nella Scheda Treno)</span>
+        <input type="text" id="gLoco" autocomplete="off" autocapitalize="characters" placeholder="es. E494 o E494.504"></label>
       <div class="actions">
         <button class="btn primary" type="button" data-gen="genera">Genera pacchetto<small>Senza IA, dal database nel telefono</small></button>
       </div>
