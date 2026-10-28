@@ -272,3 +272,10 @@ footer{line-height:1.65}
 /* 1.0.20 – viaggi senza IA */
 .sub-h { margin: 18px 0 6px; font-size: 1rem; font-weight: 700; color: var(--ink); }
 .tag-si { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1.5px solid var(--accent); color: var(--ink); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+
+/* 1.0.23 – tasto Aggiorna dati: rosso se nel repository ci sono novità */
+.sync-row { align-items: stretch; }
+#bSync.sync-red { background: var(--danger); border-color: var(--danger); color: #ffffff; }
+#bSync.sync-red small { color: #ffffff; opacity: 0.9; }
+#bSync.sync-ok { border-color: var(--ok); }
+.warn-note { color: var(--danger); font-weight: 600; }

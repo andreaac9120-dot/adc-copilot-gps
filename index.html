@@ -70,6 +70,11 @@
         <label class="btn file-btn">Importa database<input type="file" id="fDb" accept=".json,.adcdb.json,application/json" hidden></label>
       </div>
       <p class="note">Crea il pacchetto direttamente nel telefono, senza Claude e senza rete, con i dati di linea del database. Funziona solo sulle linee già caricate nel database. È una prova da confrontare con il pacchetto di Claude: lo studio delle linee si fa sempre con i tasti qui sopra.</p>
+      <div class="actions sync-row">
+        <button class="btn" type="button" id="bSync" data-gen="sync">Aggiorna dati<small id="syncInfo"></small></button>
+        <button class="btn file-btn" type="button" data-gen="token">Collegamento</button>
+      </div>
+      <p class="note warn-note" id="syncAvv" hidden></p>
       <p class="note" id="genDb"></p>
       <div class="actions">
         <label class="btn file-btn">Importa pagine FL<small>File .adcimg.json: fiancate e schemi unifilari per il fumetto</small><input type="file" id="fImg" accept=".json,.adcimg.json,application/json" multiple hidden></label>
