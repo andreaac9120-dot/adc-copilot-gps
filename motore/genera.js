@@ -289,8 +289,9 @@
         for (const r of rows) usa(r.fonte);
         const note = []; let trenoInd = "";
         if (tOut) {
-          const mie = rows.filter(r => r.verso_linea === tOut.linea.linea_id);
-          if (mie.length === 1) trenoInd = mie[0].cifra;
+          // cifre (senza ripetizioni) che portano sulla linea in uscita: la stessa cifra su due segnali vale una volta
+          const mie = unici(rows.filter(r => r.verso_linea === tOut.linea.linea_id).map(r => r.cifra));
+          if (mie.length === 1) trenoInd = mie[0];
           else if (mie.length > 1) note.push("più cifre portano sulla tua linea: confrontare con la Scheda Treno");
         }
         if (sc.ind) {
