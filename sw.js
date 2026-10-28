@@ -3,7 +3,7 @@
 // Ogni versione scarica la shell completa in una cache nuova e la attiva solo su conferma dell'utente (R01).
 // A ogni rilascio cambia VER: è ciò che fa vedere al telefono che c'è una versione nuova.
 const NS = "adc-copilot-gps-";
-const VER = NS + "shell-1.0.20";
+const VER = NS + "shell-1.0.22";
 const FONT = NS + "font";
 const CONDIVISI = NS + "condivisi";
 const SHELL = ["./", "index.html", "style.css", "db.js", "scheda.js", "gps.js", "app.js", "screen.js", "generatore.js",

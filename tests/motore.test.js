@@ -68,3 +68,24 @@ test("solo Scheda Treno: numeri e data dalla Scheda, locomotiva dal campo o dall
   assert.equal(controlla(JSON.parse(JSON.stringify(p))).length, 0);
   assert.equal(Co.componi(T, null, S(), "zz").ok, false);
 });
+
+test("pagine FL: gruppi solo con le immagini presenti nel telefono (1.0.21)", () => {
+  const lid = T.linee[0].linea_id, Tr = LT.leggi(TRACCIA), c = Co.componi(T, Tr, null);
+  const s = Object.values(G.genera(T, c.viaggio).condotta.SEG)[0];
+  const senso = /senso (\w+)\)/.exec(s.nome)[1];
+  const T2 = { ...T, pagine_fl: [
+    { fonte: T.fonti[0].fonte_id, pag: "p.2", pag_pdf: 2, tipo: "fiancata_linea", linea_id: lid, senso, km_da: null, km_a: null, img: "img/fl99_p2_fiancata_linea_x.jpg" },
+    { fonte: T.fonti[0].fonte_id, pag: "p.4", pag_pdf: 4, tipo: "principale_dx", linea_id: lid, senso, km_da: null, km_a: null, img: "img/fl99_p4_principale_dx_x.jpg" },
+    { fonte: T.fonti[0].fonte_id, pag: "p.3", pag_pdf: 3, tipo: "principale_sx", linea_id: lid, senso, km_da: null, km_a: null, img: "img/fl99_p3_principale_sx_x.jpg" },
+    { fonte: T.fonti[0].fonte_id, pag: "p.1", pag_pdf: 1, tipo: "schema", linea_id: lid, senso, km_da: null, km_a: null, img: "img/fl99_p1_schema_x.jpg" }] };
+  const senza = G.genera(T2, c.viaggio);
+  assert.deepEqual(senza.condotta.FLPAG, {});
+  assert.ok(senza.aperti.some(a => a.cosa.startsWith("Pagine FL")));
+  const p = G.genera(T2, c.viaggio, undefined, new Set(T2.pagine_fl.map(r => r.img)));
+  const g = p.condotta.FLPAG[`${lid}_${senso}_fianc`];
+  assert.deepEqual(g.pag.map(x => x.t), ["p.3 principale sinistro", "p.4 principale destro", "p.2 fiancata di linea"]);
+  assert.deepEqual(p.condotta.FLPAG[`${lid}_${senso}_schema`].pag.map(x => x.t), ["p.1 schema unifilare"]);
+  assert.ok(Object.values(p.condotta.FLLOC).every(d => d.fianc && d.schema));
+  assert.ok(!p.aperti.some(a => a.cosa.startsWith("Pagine FL")));
+  assert.equal(controlla(JSON.parse(JSON.stringify(p))).length, 0);
+});

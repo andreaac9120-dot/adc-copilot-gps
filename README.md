@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.20 — versione unica
+# ADC COPILOT 1.0.22 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,7 +8,11 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
-## Generatore senza IA (prova, 1.0.17–1.0.20)
+## Generatore senza IA (prova, 1.0.17–1.0.22)
+
+1.0.22: «Importa pagine FL» accetta anche i file con nome non numerico (FERROVIENORD: `img/flfnm_…`).
+
+1.0.21: pagine FL nel fumetto dei viaggi senza IA. Il tasto «Importa pagine FL» legge i file `.adcimg.json` (uno per FL, dal repository privato del database, impronta SHA-256 controllata) e salva le pagine nel telefono (archivio `img`, chiave `fl|img/…`, comuni a tutti i viaggi; un file più recente dello stesso FL sostituisce le pagine). Il generatore mette nel pacchetto, per ogni linea e senso, il gruppo «fiancate» (principale sinistra/destra, poi fiancata di linea) e lo «schema unifilare» solo se le immagini sono nel telefono; le linee senza immagini restano tra i punti da studiare. Il pacchetto scaricato incorpora le pagine usate. Nessuna pagina FL è nel codice pubblico.
 
 1.0.20: i viaggi generati senza IA hanno un archivio separato (IndexedDB versione 2, archivio `viaggi_si`) e un loro elenco «Viaggi senza IA salvati» nel riquadro del generatore, con etichetta SENZA IA anche nella scheda. Convivono con il viaggio di Claude dello stesso treno e data, che resta in «Viaggi salvati». Al primo avvio i viaggi senza IA salvati con la 1.0.17–1.0.19 vengono spostati nel nuovo archivio; un file .adc.json senza IA importato con «Importa pacchetto» va anche lui nel nuovo archivio.
 

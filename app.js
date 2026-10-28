@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.20";
+const VERSION = "1.0.22";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -252,6 +252,8 @@ async function importaTesto(txt, nome) {
   let p;
   try { p = JSON.parse(txt); } catch (_) { return { err: `${nome}: file non leggibile (JSON non valido)` }; }
   if (eBlocco(p)) return importaBlocco(p, nome);
+  // 1.0.21 – pagine FL per il generatore senza IA (file .adcimg.json)
+  if (p && p.formato === "adc-copilot-pagine-fl" && typeof importaPagineFL === "function") return importaPagineFL(p, nome);
   const e = controlla(p);
   if (e.length) return { err: `${nome}: ${e.slice(0, 10).join("; ")}${e.length > 10 ? ` (e altri ${e.length - 10} problemi)` : ""}` };
   // 1.0.20 – un pacchetto generato senza IA va nel suo archivio (riquadro «Generatore senza IA»)
@@ -413,7 +415,7 @@ async function importaFiles(files) {
       falliti.map(x => fact("Non importato", esc(x.err), "", "N")).join("") +
       fatti.map(x => fact("Importato", esc(x.nome), "", "V")).join("") +
       avv.map(a => fact("Attenzione", esc(a), "", "I")).join(""));
-  else if (fatti.length) { toast(fatti.length === 1 ? "Viaggio importato" : `${fatti.length} viaggi importati`); if (fatti.length === 1) (fatti[0].senzaIA ? apriSI : apri)(fatti[0].id); }
+  else if (fatti.length) { toast(fatti.length === 1 ? (fatti[0].msg || "Viaggio importato") : `${fatti.length} file importati`); if (fatti.length === 1 && fatti[0].id) (fatti[0].senzaIA ? apriSI : apri)(fatti[0].id); }
   return esiti;
 }
 

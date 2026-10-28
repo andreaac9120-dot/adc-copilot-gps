@@ -48,6 +48,18 @@ const DB = (() => {
     async getSI(id) { const [, s] = await store("viaggi_si", "readonly"); return req(s.get(id)); },
     async putSI(p) { const [tx, s] = await store("viaggi_si", "readwrite"); s.put(p); return done(tx); },
     async delSI(id) { const [tx, s] = await store("viaggi_si", "readwrite"); s.delete(id); return done(tx); },
+    // Pagine FL del generatore senza IA (1.0.21): nell'archivio "img" con chiave "fl|img/…", comuni a tutti i viaggi.
+    // Sostituisce in una sola transazione le pagine di un FL (vecchi = percorsi da togliere, blobs = nuove pagine).
+    async putPagineFL(vecchi, blobs) {
+      const d = await open(); const tx = d.transaction("img", "readwrite"), s = tx.objectStore("img");
+      for (const p of vecchi) s.delete("fl|" + p);
+      for (const [p, b] of Object.entries(blobs)) s.put(b, "fl|" + p);
+      return done(tx);
+    },
+    async chiaviPagineFL() {
+      const [, s] = await store("img", "readonly");
+      return (await req(s.getAllKeys(IDBKeyRange.bound("fl|", "fl|￿")))).map(k => String(k).slice(3));
+    },
     async getConf(k) { const [, s] = await store("conf", "readonly"); return req(s.get(k)); },
     async setConf(k, v) { const [tx, s] = await store("conf", "readwrite"); s.put(v, k); return done(tx); }
   };
