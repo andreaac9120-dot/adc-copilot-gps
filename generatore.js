@@ -30,7 +30,7 @@ async function genInfo() {
 
 // ---------- Pagine FL (1.0.21) ----------
 // File .adcimg.json (repository privato adc-copilot-db): pagine di un FL come immagini, comuni a tutti i viaggi.
-const RE_PFL = /^img\/fl\d+_p[0-9A-Za-z_.-]+\.jpg$/;
+const RE_PFL = /^img\/fl[0-9a-z]+_p[0-9A-Za-z_.-]+\.jpg$/;
 async function importaPagineFL(d, nome) {
   if (!d || d.formato !== "adc-copilot-pagine-fl") return { err: `${nome}: non è un file di pagine FL` };
   if (d.versione_formato !== 1) return { err: `${nome}: versione del formato ${d.versione_formato} non supportata da questa app` };
