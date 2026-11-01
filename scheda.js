@@ -40,12 +40,15 @@ const Scheda = (() => {
 
   const affInDubbio = L => Array.isArray(L) && L.length > 0 && L.every(l => /DA VERIFICARE/i.test(l.linea));
 
+  // Il colore usa i dati originali; il nome mostrato non ripete l'esito testuale.
+  const nomeAff = l => String(l.linea || "").split("·")
+    .map(x => x.trim()).filter(x => x && !/^(?:NON\s+)?PERCORRIBILE$/i.test(x)).join(" · ");
+
   // Usa gli esiti e le condizioni già salvati nel viaggio, senza ricalcolare la percorribilità.
   function statoAff(l) {
     const testo = [l.linea, l.nota, ...(l.sigle || []).map(x => x.t + ": " + x.x)].join(" · ");
     if (/non\s+(?:percorribil[ei]|ammess[aoie]|consentit[aoie])|incompatibile|\[no\]/i.test(testo)) return "non_percorribile";
-    const esito = [l.linea, ...(l.sigle || []).filter(x => /percorribilit/i.test(x.t)).map(x => x.x)].join(" · ");
-    if (/\bPERCORRIBILE\b/i.test(esito) && !/da verificare/i.test(esito)) return "ordinaria";
+    // Un vecchio titolo «PERCORRIBILE» non annulla condizioni o verifiche ancora presenti nelle note.
     if (/da verificare|solo\s+(?:per\s+)?(?:i\s+)?(?:treni\s+)?viaggiatori|esclus[aoie].{0,25}merci/i.test(testo)) return "condizionata";
     return "ordinaria";
   }
@@ -53,7 +56,7 @@ const Scheda = (() => {
   function noteAff(i, k) {
     const r = R[i], l = AFFLOC[r.id][k], stato = statoAff(l);
     const note = (l.sigle || []).map(x => fact(x.t, esc(x.x), x.src, x.st)).join("");
-    openSheet(shHead("Note della linea affiancata", `${l.linea} · indicatore ${l.ind}`, "ind:" + i) +
+    openSheet(shHead("Note della linea affiancata", `${nomeAff(l)} · indicatore ${l.ind}`, "ind:" + i) +
       fact("Percorribilità per il tuo treno", stato === "non_percorribile" ? "Non percorribile secondo i dati del viaggio." : "Condizioni o dati da verificare: consulta le note della linea.", "", null) +
       fact("Linea e tratto", esc(l.tratto), l.fl, null) +
       (l.nota ? fact("Nota della linea", esc(l.nota), "", null) : "") + note +
@@ -131,7 +134,7 @@ const Scheda = (() => {
     const affRiga = (l, k, direzione = "", nota = "") => {
       const stato = statoAff(l), gialla = stato !== "ordinaria";
       const label = stato === "non_percorribile" ? "Linea non percorribile: leggi le note" : "Condizioni della linea: leggi le note";
-      return `<div class="item direction-line"><button class="direction-open" type="button" data-sig="${i}:${k}" data-sig-back="ind"><span class="ind">${esc(l.ind)}</span><span class="direction-name">${esc(l.linea)}<small>${esc([direzione === l.linea ? "" : direzione, l.tratto, l.fl, nota].filter(Boolean).join(" · "))}</small></span></button>${gialla ? `<button class="affA affA-dubbio" type="button" data-aff-note="${i}:${k}" aria-label="${label}" aria-haspopup="dialog">A</button>` : `<span class="affA" aria-label="Linea affiancata rispetto al tuo percorso">A</span>`}</div>`;
+      return `<div class="item direction-line"><button class="direction-open" type="button" data-sig="${i}:${k}" data-sig-back="ind"><span class="ind">${esc(l.ind)}</span><span class="direction-name">${esc(nomeAff(l))}<small>${esc([direzione === l.linea ? "" : direzione, l.tratto, l.fl, nota].filter(Boolean).join(" · "))}</small></span></button>${gialla ? `<button class="affA affA-dubbio" type="button" data-aff-note="${i}:${k}" aria-label="${label}" aria-haspopup="dialog">A</button>` : `<span class="affA" aria-label="Linea affiancata rispetto al tuo percorso">A</span>`}</div>`;
     };
     const righe = tutti.map(x => {
       // Una cifra ripetuta su più segnali non identifica da sola una linea.
@@ -187,7 +190,7 @@ const Scheda = (() => {
   function affiancate(i, back) {
     const r = R[i], L = AFFLOC[r.id], a = AFF[r.s];
     const esito = a ? fact("Esito del tratto", esc(a.txt), a.src, a.st) : "";
-    if (L) return openSheet(shHead(affInDubbio(L) ? "Affiancata in dubbio – da verificare" : "Linee affiancate", `partono da ${r.n}`, back ? "loc:" + i : null) + `<div class="menu">${L.map((l, k) => `<button class="item" type="button" data-sig="${i}:${k}"><span>${esc(l.linea)}<br><small>${esc(l.tratto)} · ${esc(l.fl)}</small></span><span class="ind">${esc(l.ind)}</span></button>`).join("")}</div>` + esito);
+    if (L) return openSheet(shHead(affInDubbio(L) ? "Affiancata in dubbio – da verificare" : "Linee affiancate", `partono da ${r.n}`, back ? "loc:" + i : null) + `<div class="menu">${L.map((l, k) => `<button class="item" type="button" data-sig="${i}:${k}"><span>${esc(nomeAff(l))}<br><small>${esc(l.tratto)} · ${esc(l.fl)}</small></span><span class="ind">${esc(l.ind)}</span></button>`).join("")}</div>` + esito);
     let corpo, nota;
     if (!a) {
       corpo = stItem("Linee affiancate del tratto", "linee affiancate", i);
@@ -211,14 +214,14 @@ const Scheda = (() => {
     const r = R[i], l = AFFLOC[r.id][k], sg = l.sigle || [];
     if (l.colonna) {
       const c = l.colonna;
-      return openSheet(shHead("Sigle Complementari", `${l.linea} · ${l.tratto}`, origine + ":" + i) +
+      return openSheet(shHead("Sigle Complementari", `${nomeAff(l)} · ${l.tratto}`, origine + ":" + i) +
         `<div class="sh-top"><div><div class="sigla-big">Sigla ${esc(c.sigla)}</div><div class="sh-sub">${esc(c.tit)} · indicatore ${esc(l.ind)} a ${esc(r.n)}</div></div></div>` +
         (l.nota ? fact("Colonna scelta", esc(l.nota), "Sigla di composizione e gruppo del treno", null) : "") +
         colTbl("Binario legale o di sinistra", c.sx) + colTbl("Binario illegale o di destra", c.dx) +
         (c.nota ? `<div class="note">${esc(c.nota)}</div>` : "") +
         sg.map(x => fact(x.t, esc(x.x), x.src, x.st)).join(""));
     }
-    openSheet(shHead("Sigle Complementari", `${l.linea} · ${l.tratto}`, origine + ":" + i) + (l.nota ? fact("Colonna scelta", esc(l.nota), "", null) : "") +
+    openSheet(shHead("Sigle Complementari", `${nomeAff(l)} · ${l.tratto}`, origine + ":" + i) + (l.nota ? fact("Colonna scelta", esc(l.nota), "", null) : "") +
       (sg.length ? sg.map(x => fact(x.t, esc(x.x), x.src, x.st)).join("") : "") +
       stItem("Colonna delle Sigle Complementari", "fiancata delle Sigle Complementari per la linea affiancata " + l.linea + " (" + l.tratto + ")", i));
   }

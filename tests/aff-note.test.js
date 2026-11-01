@@ -32,9 +32,21 @@ test('A gialla per esito negativo, note con fonte e navigazione separata dalle S
   p.click({ sig: '0:0', sigBack: 'ind' });
   assert.match(p.html(), /sh-title">Sigle Complementari/);
 });
-test('esito specifico del treno prevale sulla condizione generale solo viaggiatori', () => {
-  assert.doesNotMatch(apri('Alternativa · PERCORRIBILE', [note]).html(), /affA-dubbio/);
+test('un vecchio titolo PERCORRIBILE non nasconde le condizioni delle note ES', () => {
+  assert.match(apri('Alternativa · PERCORRIBILE', [note]).html(), /affA-dubbio/);
+  assert.doesNotMatch(apri('Alternativa · PERCORRIBILE', []).html(), /affA-dubbio/);
   assert.match(apri('Alternativa', [note]).html(), /affA-dubbio/);
   assert.match(apri('Alternativa', [{ t: 'Percorribilità', x: 'NON PERCORRIBILE', src: 'FL', st: 'V' }]).html(), /affA-dubbio/);
   assert.match(apri('Alternativa · DA VERIFICARE', []).html(), /affA-dubbio/);
+});
+
+test('il nome delle linee non ripete PERCORRIBILE, senza alterare il colore', () => {
+  for (const esito of ['PERCORRIBILE', 'NON PERCORRIBILE']) {
+    const p = apri('linea Cintura · ' + esito + ' · NON il tuo (il tuo: 4)', []);
+    assert.doesNotMatch(p.html(), /direction-name[^<]*>[^<]*PERCORRIBILE/);
+    assert.match(p.html(), /linea Cintura · NON il tuo \(il tuo: 4\)/);
+    assert.equal(/affA-dubbio/.test(p.html()), esito === 'NON PERCORRIBILE');
+    p.click({ sig: '0:0', sigBack: 'ind' });
+    assert.doesNotMatch(p.html(), /sh-sub[^<]*>[^<]*PERCORRIBILE/);
+  }
 });
