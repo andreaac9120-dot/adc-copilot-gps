@@ -40,6 +40,26 @@ const Scheda = (() => {
 
   const affInDubbio = L => Array.isArray(L) && L.length > 0 && L.every(l => /DA VERIFICARE/i.test(l.linea));
 
+  // Usa gli esiti e le condizioni già salvati nel viaggio, senza ricalcolare la percorribilità.
+  function statoAff(l) {
+    const testo = [l.linea, l.nota, ...(l.sigle || []).map(x => x.t + ": " + x.x)].join(" · ");
+    if (/non\s+(?:percorribil[ei]|ammess[aoie]|consentit[aoie])|incompatibile|\[no\]/i.test(testo)) return "non_percorribile";
+    const esito = [l.linea, ...(l.sigle || []).filter(x => /percorribilit/i.test(x.t)).map(x => x.x)].join(" · ");
+    if (/\bPERCORRIBILE\b/i.test(esito) && !/da verificare/i.test(esito)) return "ordinaria";
+    if (/da verificare|solo\s+(?:per\s+)?(?:i\s+)?(?:treni\s+)?viaggiatori|esclus[aoie].{0,25}merci/i.test(testo)) return "condizionata";
+    return "ordinaria";
+  }
+
+  function noteAff(i, k) {
+    const r = R[i], l = AFFLOC[r.id][k], stato = statoAff(l);
+    const note = (l.sigle || []).map(x => fact(x.t, esc(x.x), x.src, x.st)).join("");
+    openSheet(shHead("Note della linea affiancata", `${l.linea} · indicatore ${l.ind}`, "ind:" + i) +
+      fact("Percorribilità per il tuo treno", stato === "non_percorribile" ? "Non percorribile secondo i dati del viaggio." : "Condizioni o dati da verificare: consulta le note della linea.", "", null) +
+      fact("Linea e tratto", esc(l.tratto), l.fl, null) +
+      (l.nota ? fact("Nota della linea", esc(l.nota), "", null) : "") + note +
+      (!note && !l.nota ? `<div class="note">Il viaggio non contiene note dettagliate sul motivo. Il dato va studiato.</div>` : ""));
+  }
+
   function render() {
     let h = "", lastSeg = null;
     R.forEach((r, i) => {
@@ -109,8 +129,9 @@ const Scheda = (() => {
     const r = R[i], d = IND?.[r.id], linee = AFFLOC?.[r.id] || [], tutti = d?.tutti || [];
     const usate = new Set();
     const affRiga = (l, k, direzione = "", nota = "") => {
-      const dubbio = /DA VERIFICARE/i.test(l.linea);
-      return `<button class="item direction-line" type="button" data-sig="${i}:${k}" data-sig-back="ind"><span class="ind">${esc(l.ind)}</span><span class="direction-name">${esc(l.linea)}<small>${esc([direzione === l.linea ? "" : direzione, l.tratto, l.fl, nota].filter(Boolean).join(" · "))}</small></span><span class="affA${dubbio ? " affA-dubbio" : ""}" aria-label="${dubbio ? "Linea affiancata da verificare" : "Linea affiancata rispetto al tuo percorso"}">A</span></button>`;
+      const stato = statoAff(l), gialla = stato !== "ordinaria";
+      const label = stato === "non_percorribile" ? "Linea non percorribile: leggi le note" : "Condizioni della linea: leggi le note";
+      return `<div class="item direction-line"><button class="direction-open" type="button" data-sig="${i}:${k}" data-sig-back="ind"><span class="ind">${esc(l.ind)}</span><span class="direction-name">${esc(l.linea)}<small>${esc([direzione === l.linea ? "" : direzione, l.tratto, l.fl, nota].filter(Boolean).join(" · "))}</small></span></button>${gialla ? `<button class="affA affA-dubbio" type="button" data-aff-note="${i}:${k}" aria-label="${label}" aria-haspopup="dialog">A</button>` : `<span class="affA" aria-label="Linea affiancata rispetto al tuo percorso">A</span>`}</div>`;
     };
     const righe = tutti.map(x => {
       // Una cifra ripetuta su più segnali non identifica da sola una linea.
@@ -123,7 +144,7 @@ const Scheda = (() => {
     openSheet(shHead("Indicatori di direzione", r.n, "loc:" + i) +
       `<div class="note">Il tuo indicatore: <b>${esc(r.ind || d?.treno || "non disponibile")}</b></div>` +
       (righe ? `<div class="menu direction-list">${righe}</div>` : stItem("Indicatori di direzione", "indicatori di direzione (schema unifilare)", i)) +
-      (linee.length ? `<div class="note">A = linea affiancata rispetto al tuo percorso. Tocca la linea per le Sigle Complementari. A gialla = da verificare.</div>` : "") +
+      (linee.length ? `<div class="note">A = linea affiancata rispetto al tuo percorso. Tocca la linea per le Sigle Complementari. Tocca la A gialla per le note di non percorribilità o le condizioni da verificare.</div>` : "") +
       `${d?.nota ? `<div class="note">${esc(d.nota)}</div>` : ""}<div class="note">${esc(d?.src)}</div>`);
   }
   function plprot(i) {
@@ -320,6 +341,7 @@ const Scheda = (() => {
     }
     if (d.pg) return popOpen(d.pg, +d.i), true;
     if (d.a) return affiancate(+d.a, false), true;
+    if (d.affNote) { const [a, b] = d.affNote.split(":"); return noteAff(+a, +b), true; }
     if (d.sig) { const [a, b] = d.sig.split(":"); return sigle(+a, +b, d.sigBack === "ind" ? "ind" : "aff"), true; }
     if (t.id === "popClose") return popClose(), true;
     if (d.tab) { POP.k = +d.tab; POP.z = 1; popShow(); $("#popBody").scrollTo(0, 0); return true; }
