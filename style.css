@@ -120,6 +120,12 @@ details.field summary, .sum { cursor: pointer; font-weight: 700; color: var(--li
 .affA { width: 2.15rem; height: 2.15rem; border: 2px solid #ffffff; outline: 1px solid var(--danger); background: var(--danger); color: #ffffff; font-family: var(--f-disp); font-weight: 700; font-size: 1.2rem; border-radius: 5px; cursor: pointer; line-height: 1; padding: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.25); }
 button:focus-visible, .file-btn:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
 .affA.affA-dubbio { background: var(--aff-dubbio); color: #000000; outline-color: var(--aff-dubbio); }
+.ind-toggle { cursor: pointer; min-width: 44px; min-height: 44px; }
+.direction-list .direction-line { display: flex; align-items: center; gap: 12px; text-align: left; }
+.direction-line > .ind, .direction-line > .affA { flex-shrink: 0; }
+.direction-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.direction-name small { display: block; margin-top: 5px; }
+.direction-line > .affA { display: inline-flex; align-items: center; justify-content: center; cursor: inherit; }
 .row.loc .name button:active, .item:active, .chip:active, .affA:active, .studia:active, .close:active, .copy:active, .btn:active, .back:active { transform: scale(0.96); opacity: 0.85; }
 @media (prefers-reduced-motion: no-preference) {
   button, .btn { transition: transform 0.1s ease, opacity 0.1s ease, background-color 0.15s ease; }
@@ -279,3 +285,4 @@ footer{line-height:1.65}
 #bSync.sync-red small { color: #ffffff; opacity: 0.9; }
 #bSync.sync-ok { border-color: var(--ok); }
 .warn-note { color: var(--danger); font-weight: 600; }
+

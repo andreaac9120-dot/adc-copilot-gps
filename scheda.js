@@ -48,12 +48,13 @@ const Scheda = (() => {
       let name = esc(r.n);
       if (r.t === "loc") name = `<button type="button" data-i="${i}" aria-label="Apri ${esc(r.n)}">${esc(r.n)}</button>`;
       if (r.t === "m3" && PRESC) name = `<button type="button" data-presc="1">${esc(r.n)}</button>`;
-      const ind = r.ind ? `<span class="ind" title="Indicatore di direzione dalla Scheda Treno">${esc(r.ind)}</span>` : "";
-      const affList = AFFLOC?.[r.id], inDubbio = affInDubbio(affList);
-      const aff = r.t === "loc" && affList?.length ? `<button class="affA${inDubbio ? " affA-dubbio" : ""}" type="button" data-a="${i}" aria-label="${inDubbio ? "Linee affiancate in dubbio" : "Linee affiancate"}">A</button>` : "";
+      const cifra = r.ind || IND?.[r.id]?.treno || "";
+      const ind = r.t === "loc" && (cifra || IND?.[r.id] || AFFLOC?.[r.id]?.length)
+        ? `<button class="ind ind-toggle" type="button" data-act="ind" data-i="${i}" aria-haspopup="dialog" aria-label="Indicatori di direzione da ${esc(r.n)}${cifra ? ", indicatore " + esc(cifra) : ""}">${esc(cifra || "—")}<span aria-hidden="true"> ▾</span></button>`
+        : (r.ind ? `<span class="ind">${esc(r.ind)}</span>` : "");
       const kp = String(r.km).split("/");
       const km = kp.length > 1 ? `<span>${esc(kp[0])}</span><span class="k2">${esc(kp[1])}</span>` : `<span>${esc(kp[0])}</span>`;
-      h += `<div class="row ${r.t}" data-row="${i}"><span class="grado">${esc(r.g || "")}</span><span class="vel">${esc(r.v || "")}</span><span class="km">${km}</span><span class="name">${name}</span><span class="dircell">${ind}${aff}</span></div>`;
+      h += `<div class="row ${r.t}" data-row="${i}"><span class="grado">${esc(r.g || "")}</span><span class="vel">${esc(r.v || "")}</span><span class="km">${km}</span><span class="name">${name}</span><span class="dircell">${ind}</span></div>`;
     });
     $("#rows").innerHTML = h;
   }
@@ -105,10 +106,25 @@ const Scheda = (() => {
     </div>`);
   }
   function indicatori(i) {
-    const r = R[i], d = IND[r.id];
+    const r = R[i], d = IND?.[r.id], linee = AFFLOC?.[r.id] || [], tutti = d?.tutti || [];
+    const usate = new Set();
+    const affRiga = (l, k, direzione = "", nota = "") => {
+      const dubbio = /DA VERIFICARE/i.test(l.linea);
+      return `<button class="item direction-line" type="button" data-sig="${i}:${k}" data-sig-back="ind"><span class="ind">${esc(l.ind)}</span><span class="direction-name">${esc(l.linea)}<small>${esc([direzione === l.linea ? "" : direzione, l.tratto, l.fl, nota].filter(Boolean).join(" · "))}</small></span><span class="affA${dubbio ? " affA-dubbio" : ""}" aria-label="${dubbio ? "Linea affiancata da verificare" : "Linea affiancata rispetto al tuo percorso"}">A</span></button>`;
+    };
+    const righe = tutti.map(x => {
+      // Una cifra ripetuta su più segnali non identifica da sola una linea.
+      const candidate = linee.map((l, k) => ({ l, k })).filter(({ l }) => l.ind === x[0]);
+      if (candidate.length === 1 && tutti.filter(y => y[0] === x[0]).length === 1) {
+        const { l, k } = candidate[0]; usate.add(k); return affRiga(l, k, x[1], x[2]);
+      }
+      return `<div class="item direction-line"><span class="ind">${esc(x[0])}</span><span class="direction-name"><span class="dot d-${ST(d.st)}"></span>${esc(x[1])}${x[2] ? `<small>${esc(x[2])}</small>` : ""}</span></div>`;
+    }).join("") + linee.map((l, k) => usate.has(k) ? "" : affRiga(l, k)).join("");
     openSheet(shHead("Indicatori di direzione", r.n, "loc:" + i) +
-      d.tutti.map(x => `<div class="phone"><div class="who"><span class="dot d-${ST(d.st)}"></span>${esc(x[1])}${x[2] ? `<div class="note"><b>${esc(x[2])}</b></div>` : ""}</div><span class="num">${esc(x[0])}</span></div>`).join("") +
-      `${d.nota ? `<div class="note">${esc(d.nota)}</div>` : ""}<div class="note">${esc(d.src)}</div>`);
+      `<div class="note">Il tuo indicatore: <b>${esc(r.ind || d?.treno || "non disponibile")}</b></div>` +
+      (righe ? `<div class="menu direction-list">${righe}</div>` : stItem("Indicatori di direzione", "indicatori di direzione (schema unifilare)", i)) +
+      (linee.length ? `<div class="note">A = linea affiancata rispetto al tuo percorso. Tocca la linea per le Sigle Complementari. A gialla = da verificare.</div>` : "") +
+      `${d?.nota ? `<div class="note">${esc(d.nota)}</div>` : ""}<div class="note">${esc(d?.src)}</div>`);
   }
   function plprot(i) {
     const r = R[i], d = PLPROT[r.id];
@@ -170,18 +186,18 @@ const Scheda = (() => {
   function colTbl(lbl, b) {
     return `<h3 class="grp">${esc(lbl)}</h3><div class="note">${esc(b.sez)}</div><div class="stbl-wrap"><table class="stbl"><thead><tr><th>Località</th><th>Km</th><th>Rs</th><th>NoRS</th></tr></thead><tbody>${b.rows.map(x => `<tr><td class="loc">${esc(x[0])}</td><td>${esc(x[1])}</td><td class="${x[4] ? "new" : "cont"}">${esc(x[2])}</td><td class="${x[4] ? "new" : "cont"}">${esc(x[3])}</td></tr>`).join("")}</tbody></table></div><div class="note">${esc(b.pag)}</div>`;
   }
-  function sigle(i, k) {
+  function sigle(i, k, origine = "aff") {
     const r = R[i], l = AFFLOC[r.id][k], sg = l.sigle || [];
     if (l.colonna) {
       const c = l.colonna;
-      return openSheet(shHead(l.linea, `Sigle Complementari · ${l.tratto}`, null) +
+      return openSheet(shHead("Sigle Complementari", `${l.linea} · ${l.tratto}`, origine + ":" + i) +
         `<div class="sh-top"><div><div class="sigla-big">Sigla ${esc(c.sigla)}</div><div class="sh-sub">${esc(c.tit)} · indicatore ${esc(l.ind)} a ${esc(r.n)}</div></div></div>` +
         (l.nota ? fact("Colonna scelta", esc(l.nota), "Sigla di composizione e gruppo del treno", null) : "") +
         colTbl("Binario legale o di sinistra", c.sx) + colTbl("Binario illegale o di destra", c.dx) +
         (c.nota ? `<div class="note">${esc(c.nota)}</div>` : "") +
         sg.map(x => fact(x.t, esc(x.x), x.src, x.st)).join(""));
     }
-    openSheet(shHead(l.linea, `Sigle Complementari · ${l.tratto}`, null) + (l.nota ? fact("Colonna scelta", esc(l.nota), "", null) : "") +
+    openSheet(shHead("Sigle Complementari", `${l.linea} · ${l.tratto}`, origine + ":" + i) + (l.nota ? fact("Colonna scelta", esc(l.nota), "", null) : "") +
       (sg.length ? sg.map(x => fact(x.t, esc(x.x), x.src, x.st)).join("") : "") +
       stItem("Colonna delle Sigle Complementari", "fiancata delle Sigle Complementari per la linea affiancata " + l.linea + " (" + l.tratto + ")", i));
   }
@@ -304,7 +320,7 @@ const Scheda = (() => {
     }
     if (d.pg) return popOpen(d.pg, +d.i), true;
     if (d.a) return affiancate(+d.a, false), true;
-    if (d.sig) { const [a, b] = d.sig.split(":"); return sigle(+a, +b), true; }
+    if (d.sig) { const [a, b] = d.sig.split(":"); return sigle(+a, +b, d.sigBack === "ind" ? "ind" : "aff"), true; }
     if (t.id === "popClose") return popClose(), true;
     if (d.tab) { POP.k = +d.tab; POP.z = 1; popShow(); $("#popBody").scrollTo(0, 0); return true; }
     if (t.id === "zIn") return popZoom(1.5), true;
@@ -314,7 +330,12 @@ const Scheda = (() => {
     if (d.aperti) return aperti(), true;
     if (d.loco) return loco(+d.loco), true;
     if (t.matches(".row.loc .name button")) return locMenu(+d.i), true;
-    if (d.back) return locMenu(+d.back.split(":")[1]), true;
+    if (d.back) {
+      const [origine, indice] = d.back.split(":");
+      if (origine === "ind") return indicatori(+indice), true;
+      if (origine === "aff") return affiancate(+indice, true), true;
+      return locMenu(+indice), true;
+    }
     if (d.act === "fianc") return fiancata(+d.i), true;
     if (d.act === "ind") return indicatori(+d.i), true;
     if (d.act === "pl") return plprot(+d.i), true;
@@ -324,3 +345,4 @@ const Scheda = (() => {
   }
   return { show, click, popClose, docBox, marcaRiga, popOpenVisible: () => !$("#pop").hidden };
 })();
+

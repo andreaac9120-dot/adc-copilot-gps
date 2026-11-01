@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.25 — versione unica
+# ADC COPILOT 1.0.26 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -9,6 +9,8 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
 ## Generatore senza IA (prova, 1.0.17–1.0.23)
+
+1.0.26: nella scheda treno l’indicatore di direzione apre l’elenco delle direzioni e delle linee. La A delle affiancate è mostrata accanto alla linea nella finestra, con il dettaglio delle Sigle Complementari e il ritorno all’elenco. I viaggi già salvati usano la nuova interfaccia senza reimportazione; i dati mancanti restano da studiare.
 
 1.0.25: correzioni dal rapporto di debug, seconda parte. **F10** ogni viaggio senza IA salvato tiene la sua copia delle pagine FL che usa: una nuova edizione scaricata con «Aggiorna dati» non cambia i viaggi già salvati (quelli salvati prima continuano a usare le pagine comuni). **F04** ogni locomotiva della traccia vale solo sui tratti che percorre (cambio mezzo, doppia trazione). **F15** il database importato si controlla anche nella struttura (righe, chiavi, riferimenti, conteggi), non solo nell'impronta. **F07** un solo aggiornamento dati alla volta; import manuali rimandati durante l'aggiornamento. **F09** tempi massimi e un nuovo tentativo per le richieste a GitHub; indice e file dalla stessa revisione. **F11** spegnere il GPS senza un fix non seleziona più la prima riga. **F12** l'archivio del telefono si riapre dopo un errore. **F13** un'apertura lenta non riporta più al viaggio dopo «Home». **F14** un viaggio senza IA danneggiato non blocca l'elenco: si può esportare o eliminare. Prove: `node tests/debug-astra.test.js`; nel browser `node tests/browser/debug-astra.browser.js` (serve Playwright).
 
@@ -88,3 +90,4 @@ Restano gli arresti quando si usano le frecce manuali, si chiude/cambia viaggio 
 Una PWA non può garantire aggiornamenti continui in background: Android/iOS o il browser possono sospenderli o terminare l’app. Per la continuità a schermo spento serve un’implementazione nativa con i relativi permessi e servizi di localizzazione.
 
 Verifica software: `node --test tests/*.test.js`. Sul telefono: attivare il GPS, passare a un’altra app per 10–30 secondi e tornare; ripetere bloccando lo schermo. Controllare ON e riacquisizione, poi premere Ferma e verificare che un nuovo passaggio in background non lo riattivi. Provare anche permesso negato, segnale assente e uscita dal viaggio.
+

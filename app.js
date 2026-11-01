@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.25";
+const VERSION = "1.0.26";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -678,3 +678,4 @@ async function registraSW() {
   const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/);
   if (m) apri(decodeURIComponent(m[1])); else if (s && typeof apriSI === "function") apriSI(decodeURIComponent(s[1]));
 })();
+
