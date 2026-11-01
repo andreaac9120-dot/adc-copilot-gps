@@ -1,5 +1,5 @@
 // ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.24";
+const VERSION = "1.0.25";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -459,7 +459,13 @@ async function sospesi() {
 // D01 – un viaggio salvato rovinato (o di una versione vecchia) non blocca la Home: si può esportare o eliminare.
 const valido = p => { try { return controlla(p).length === 0; } catch (_) { return false; } };
 const dataId = p => String(p && p.id || "").split("_")[1] || "";
+// F13: ogni navigazione (Home, apertura di un viaggio) ha un numero; un'apertura lenta che finisce dopo che
+// l'utente è andato altrove non cambia più schermata, cronologia né GPS.
+const NAV = { n: 0 };
+const navNuova = () => ++NAV.n;
+const revoca = urls => { for (const u of Object.values(urls)) URL.revokeObjectURL(u); };
 async function home() {
+  navNuova();
   if (typeof GPS !== "undefined") GPS.close();
   closeSheet(); Scheda.popClose();
   for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
@@ -484,14 +490,20 @@ async function home() {
   await sospesi();
 }
 async function apri(id) {
+  const t = navNuova();
   const p = await DB.getViaggio(id);
+  if (t !== NAV.n) return;
   if (!p) return toast("Viaggio non trovato");
   const e = (() => { try { return controlla(p); } catch (err) { return [testoErrore(err)]; } })();
   if (e.length) return openSheet(shHead("Viaggio non leggibile", id) + e.slice(0, 10).map(x => fact("Problema", esc(x), "", "N")).join("") +
     `<div class="note">Esporta il file e chiedi a Claude di ripubblicare il pacchetto, oppure elimina il viaggio.</div><div class="btns left"><button class="studia alt" type="button" data-exp="${esc(id)}">Esporta</button><button class="studia" type="button" data-del="${esc(id)}">Elimina</button></div>`);
-  for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
+  const urls = {};
   const usate = new Set(Object.values(p.condotta.FLPAG).flatMap(g => g.pag.map(x => x.img)));
-  for (const path of usate) { try { const b = await DB.getImg(id, path); if (b) imgURLs[path] = URL.createObjectURL(b); } catch (_) {} }
+  for (const path of usate) {
+    try { const b = await DB.getImg(id, path); if (b) urls[path] = URL.createObjectURL(b); } catch (_) {}
+    if (t !== NAV.n) return revoca(urls);
+  }
+  revoca(imgURLs); imgURLs = urls;
   try { Scheda.show(p, imgURLs); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
   $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);

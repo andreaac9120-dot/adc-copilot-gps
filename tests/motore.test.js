@@ -47,7 +47,8 @@ test("traccia, composizione e pacchetto valido per la PWA", () => {
 
 test("database importato: impronta controllata", async () => {
   const tab = {}; for (const t of A.TABELLE) tab[t] = T[t] || [];
-  const d = { formato: "adc-copilot-database", versione_formato: 1, versione: "20261103-0800", tabelle: tab, sha256: await A.sha256(A.canonico(tab)) };
+  const d = { formato: "adc-copilot-database", versione_formato: 1, versione: "20261103-0800", tabelle: tab,
+    conteggi: Object.fromEntries(Object.entries(tab).map(([k, v]) => [k, v.length])), sha256: await A.sha256(A.canonico(tab)) };
   assert.ok((await A.controlla(JSON.stringify(d))).db);
   d.tabelle.linee[0].nome = "cambiato";
   assert.match((await A.controlla(JSON.stringify(d))).err, /impronta/);

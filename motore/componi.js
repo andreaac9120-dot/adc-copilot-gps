@@ -65,7 +65,8 @@
       if (tt.size && !tt.has(tipo)) R.push(`  ! ATTENZIONE: la traccia indica ${[...tt].sort().join(", ")}, è stata usata la locomotiva indicata (${tipo})`);
       return [{ tipo, etichetta: locoUtente.trim() }];
     }
-    if (Tr.loco.length) return Tr.loco.map(l => ({ tipo: l.tipo, etichetta: `${l.tipo}-${l.numero}` }));
+    // F04: dalla traccia anche il tratto percorso da ogni locomotiva (da → a), risolto più sotto sull'itinerario
+    if (Tr.loco.length) return Tr.loco.map(l => ({ tipo: l.tipo, etichetta: `${l.tipo}-${l.numero}`, da: l.da, a: l.a }));
     const ms = S ? S.intestazione.mezzo_sigla : null, tipo = tipoLoco(ms);
     if (tipo) {
       R.push(`  ! LOCOMOTIVA presa dalla Scheda Treno: ${ms} è il mezzo intestatario della sigla, non necessariamente quello che traina il treno: verificare (o indicare la locomotiva)`);
@@ -250,6 +251,21 @@
       if (fine < sequenza.length - 1) lacune.push(`destinazione non raggiunta: mancano ${nomiTra(fine + 1, sequenza.length)}`);
     }
     const completo = !lacune.length;
+
+    // Ambito delle locomotive della traccia (F04): ogni locomotiva vale solo sui tratti tra la sua località «da» e «a»
+    // (cambio mezzo, doppia trazione su una parte). Se non si riesce a collocarla resta su tutti i tratti, con avviso.
+    const chiamata = (s, nome) => [s.riga.nome, s.riga.nome_traccia].some(n => n && simile(n, nome) >= 0.8);
+    for (const l of loco) {
+      if (!("da" in l)) continue;
+      const da = l.da, a = l.a; delete l.da; delete l.a;
+      const ida = sequenza.findIndex(s => chiamata(s, da));
+      const ia = ida < 0 ? -1 : sequenza.findIndex((s, k) => k > ida && chiamata(s, a));
+      if (ida < 0 || ia < 0) { R.push(`  ! LOCOMOTIVA ${l.etichetta}: tratto ${da} → ${a} non collocato sull'itinerario, considerata su tutti i tratti`); continue; }
+      const tr = estremi.map((e, k) => (e[0] < ia && e[1] > ida ? k : -1)).filter(k => k >= 0);
+      if (!tr.length) R.push(`  ! LOCOMOTIVA ${l.etichetta}: nessun tratto dell'itinerario tra ${da} e ${a}`);
+      l.tratti = tr;
+    }
+    if (loco.some(l => l.tratti)) R.push("LOCOMOTIVE per tratto: " + loco.map(l => `${l.etichetta} ${l.tratti ? l.tratti.map(k => String.fromCharCode(65 + k)).join("") || "nessuno" : "tutti"}`).join(", "));
     if (!completo) { R.push("  ! ITINERARIO PARZIALE: il pacchetto non copre tutto il viaggio"); for (const l of lacune) R.push(`    - ${l}`); }
 
     // colonna delle Sigle

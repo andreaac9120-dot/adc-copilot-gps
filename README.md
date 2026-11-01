@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.24 — versione unica
+# ADC COPILOT 1.0.25 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -9,6 +9,8 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
 ## Generatore senza IA (prova, 1.0.17–1.0.23)
+
+1.0.25: correzioni dal rapporto di debug, seconda parte. **F10** ogni viaggio senza IA salvato tiene la sua copia delle pagine FL che usa: una nuova edizione scaricata con «Aggiorna dati» non cambia i viaggi già salvati (quelli salvati prima continuano a usare le pagine comuni). **F04** ogni locomotiva della traccia vale solo sui tratti che percorre (cambio mezzo, doppia trazione). **F15** il database importato si controlla anche nella struttura (righe, chiavi, riferimenti, conteggi), non solo nell'impronta. **F07** un solo aggiornamento dati alla volta; import manuali rimandati durante l'aggiornamento. **F09** tempi massimi e un nuovo tentativo per le richieste a GitHub; indice e file dalla stessa revisione. **F11** spegnere il GPS senza un fix non seleziona più la prima riga. **F12** l'archivio del telefono si riapre dopo un errore. **F13** un'apertura lenta non riporta più al viaggio dopo «Home». **F14** un viaggio senza IA danneggiato non blocca l'elenco: si può esportare o eliminare. Prove: `node tests/debug-astra.test.js`; nel browser `node tests/browser/debug-astra.browser.js` (serve Playwright).
 
 1.0.24: correzioni dal rapporto di debug del 29/10/2026 (punti P1). **F01** i valori della Scheda (velocità, grado, indicatore) restano del loro passaggio nelle località attraversate più volte (`loc_1`, `loc_2`…). **F02** se l'itinerario non copre tutto il viaggio il pacchetto è segnato «ITINERARIO PARZIALE» (chip, percorso, primo punto aperto) e il salvataggio chiede conferma. **F03** Scheda Treno di un altro giorno o di un altro treno: non viene unita alla traccia; numeri in parte diversi restano come discrepanza nel pacchetto. **F05** un pacchetto senza IA importato (anche da un altro telefono) conserva le pagine FL incorporate, salvate con il viaggio. **F06** database + informazioni e pagine FL + catalogo si salvano in una sola transazione: un errore non lascia mai metà dei dati. **F08** «Rimuovi token» annulla le richieste in corso: una risposta tardiva non rimette più il token. Prove: `node tests/debug-astra.test.js`.
 

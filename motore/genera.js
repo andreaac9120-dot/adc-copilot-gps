@@ -80,7 +80,8 @@
     const TRENO = `treno ${treno} del ${dataIt}`;
     const categoria = V.categoria || "merci";
     const scheda = V.scheda || {};
-    const locoTipi = V.loco.map(l => l.tipo);
+    // F04: locomotive di ogni tratto (indice nell'itinerario); senza «tratti» la locomotiva vale su tutti
+    const locoSu = i => V.loco.filter(l => !Array.isArray(l.tratti) || l.tratti.includes(i)).map(l => l.tipo);
 
     // ------------------------------------------------------------- itinerario
     const tratti = [];
@@ -224,7 +225,7 @@
       if (righe.length) DCO[t.lettera] = righe;
 
       // LOCO: compatibilità per ogni locomotiva sul tratto
-      for (const tipo of locoTipi) {
+      for (const tipo of unici(locoSu(t.lettera.charCodeAt(0) - 65))) {
         const lo_ = db.loco.get(tipo);
         const tt = `${t.lettera} · ${SEG[t.lettera].nome}`;
         if (!lo_) { LOCO.push({ t: tt, x: `${tipo}: locomotiva non nel database`, st: "N", src: "database dati di linea", loco: tipo }); continue; }
@@ -335,7 +336,7 @@
               if (!validoPerTreno(g.categoria)) continue;
               if (gia.has(ol.linea_id)) continue;
               gia.add(ol.linea_id);
-              voci.push(voceAffloc(db, V, o, ol, g, indO[0], trenoInd, rows, src, st, usa, aperti, TRENO));
+              voci.push(voceAffloc(db, V, o, ol, g, indO[0], trenoInd, rows, src, st, usa, aperti, TRENO, locoSu));
             }
           }
           if (voci.length) AFFLOC[o.id] = voci;
@@ -401,7 +402,8 @@
       treno: V.treno_testo || `${treno}`,
       percorso: nomi.join(" → ") + (parziale ? " (ITINERARIO PARZIALE)" : ""),
       data_viaggio: dataIt,
-      loco: V.loco.map(l => ({ tipo: l.tipo, etichetta: l.etichetta || l.tipo, tratti: Object.keys(SEG) })),
+      loco: V.loco.map(l => ({ tipo: l.tipo, etichetta: l.etichetta || l.tipo,
+        tratti: Array.isArray(l.tratti) ? l.tratti.map(k => String.fromCharCode(65 + k)).filter(x => has(SEG, x)) : Object.keys(SEG) })),
       chip: [parziale ? "ITINERARIO PARZIALE" : "", V.sigla, unici(Object.values(SEG).map(s => s.fl)).join(", ")].filter(x => x)
     };
     if (PRESC) {
@@ -513,11 +515,11 @@
     return [PRESC, avvisi];
   }
 
-  function voceAffloc(db, V, o, ol, g, indRow, trenoInd, rows, indSrc, indSt, usa, aperti, TRENO) {
+  function voceAffloc(db, V, o, ol, g, indRow, trenoInd, rows, indSrc, indSt, usa, aperti, TRENO, locoSu) {
     const T = db.T, controlli = [];
     usa(g.fonte);
     controlli.push(["Categoria del treno ammessa dalla Sez. 4.6", "ok", g.st, db.src(g.fonte, g.pag)]);
-    for (const tipo of V.loco.map(l => l.tipo)) {
+    for (const tipo of unici(locoSu((o.out || o.inn).lettera.charCodeAt(0) - 65))) {
       const lo = db.loco.get(tipo) || null;
       const kmA = ol.km_a || 0, kmDa = ol.km_da || 0;
       const cc = lo ? T.compatibilita.filter(c => c.colonna_de10 === lo.colonna_de10 && c.linea_id === ol.linea_id && lt(c.km_da, kmA) && gt(c.km_a, kmDa)) : [];
@@ -559,7 +561,7 @@
         colonna = { sigla: V.sigla || "", tit: `Colonna ${colId} ${sig[0].titolo}`, nota: sig.every(r => r.binario === "sxdx") ? "binario sinistro e destro uguali" : "", sx: lati.sx, dx: lati.dx };
       const stSig = peggiore(...sig.map(r => r.st));
       let acc = null;
-      for (const tipo of V.loco.map(l => l.tipo)) {
+      for (const tipo of unici(locoSu((o.out || o.inn).lettera.charCodeAt(0) - 65))) {
         const lo = db.loco.get(tipo) || null;
         const rg = lo ? lo.raggr_sigle : "";
         acc = T.accesso_sigle.find(a => a.fonte === ol.fonte && eq(a.raggruppamento, rg)) || null;

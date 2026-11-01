@@ -13,8 +13,18 @@ const DB = (() => {
         if (!d.objectStoreNames.contains("conf")) d.createObjectStore("conf");
         if (!d.objectStoreNames.contains("viaggi_si")) d.createObjectStore("viaggi_si", { keyPath: "id" }); // viaggi senza IA
       };
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
+      r.onsuccess = () => {
+        const d = r.result;
+        // F12: se un'altra scheda aggiorna l'archivio o il browser chiude la connessione, la prossima operazione
+        // riapre l'archivio invece di usare una connessione morta
+        d.onversionchange = () => { try { d.close(); } catch (_) {} dbp = null; };
+        d.onclose = () => { dbp = null; };
+        res(d);
+      };
+      r.onerror = () => { dbp = null; rej(r.error); };   // F12: un errore temporaneo non blocca i tentativi successivi
+      r.onblocked = () => {
+        if (typeof toast === "function") toast("Archivio occupato da un'altra finestra dell'app: chiudila per continuare");
+      };
     });
     return dbp;
   }
@@ -54,7 +64,8 @@ const DB = (() => {
     // Viaggi generati senza IA: archivio separato, così convivono con quelli di Claude dello stesso treno e data
     async listSI() { const [, s] = await store("viaggi_si", "readonly"); return req(s.getAll()); },
     async getSI(id) { const [, s] = await store("viaggi_si", "readonly"); return req(s.get(id)); },
-    // F05: le pagine FL incorporate in un pacchetto senza IA importato restano del viaggio (chiave "si|<id>|img/…"),
+    // F05/F10: le pagine FL di un viaggio senza IA (incorporate nel pacchetto o copiate da quelle comuni al
+    // salvataggio) restano del viaggio (chiave "si|<id>|img/…"),
     // salvate nella stessa transazione del viaggio; le pagine di una versione precedente dello stesso viaggio si tolgono.
     async putSI(p, blobs) {
       const d = await open(); const tx = d.transaction(["viaggi_si", "img"], "readwrite"), im = tx.objectStore("img");

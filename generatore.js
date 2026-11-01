@@ -4,6 +4,8 @@
 // traduzione fedele dei programmi Python del database: stessi dati in ingresso, stesso pacchetto in uscita.
 // Non sostituisce lo studio con Claude (tasti Studio linea condotta/formazione), che resta invariato.
 const GEN = { ultimo: null, rapporto: [], occupato: false };
+// F07: import manuali (database, pagine FL) e «Aggiorna dati» non si sovrappongono
+function syncInCorso() { if (SYNC.occupato) { toast("Aggiornamento dati in corso: riprova tra poco"); return true; } return false; }
 let pdfjsP = null;
 function pdfjs() {
   if (!pdfjsP) pdfjsP = import("./vendor/pdfjs/pdf.min.mjs").then(m => {
@@ -17,8 +19,9 @@ const dataOra = iso => { try { return new Date(iso).toLocaleString("it-IT", { da
 async function genInfo() {
   const el = $("#genDb"); if (!el) return;
   let i = null; try { i = await DB.getConf("adcdb_info"); } catch (_) {}
+  const n = i && i.conteggi && typeof i.conteggi === "object" ? i.conteggi : {};   // F15: informazioni incomplete non bloccano la Home
   el.innerHTML = i
-    ? `Database dati di linea <b>${esc(i.versione)}</b> · ${esc(i.conteggi.linee)} linee, ${esc(i.conteggi.localita)} località · importato il ${esc(dataOra(i.importato))}`
+    ? `Database dati di linea <b>${esc(i.versione || "?")}</b> · ${esc(n.linee ?? "?")} linee, ${esc(n.localita ?? "?")} località · importato il ${esc(dataOra(i.importato))}`
     : "Nessun database nel telefono: importa il file <b>.adcdb.json</b> che ti consegna Claude (non è pubblico).";
   const ei = $("#genImg"); if (!ei) return;
   let f = null; try { f = await DB.getConf("pagine_fl_info"); } catch (_) {}
@@ -32,6 +35,7 @@ async function genInfo() {
 // File .adcimg.json (repository privato adc-copilot-db): pagine di un FL come immagini, comuni a tutti i viaggi.
 const RE_PFL = /^img\/fl[0-9a-z]+_p[0-9A-Za-z_.-]+\.jpg$/;
 async function importaPagineFL(d, nome, auto) {
+  if (!auto && SYNC.occupato) return { err: `${nome}: aggiornamento dati in corso, riprova tra poco` };   // F07
   if (!d || d.formato !== "adc-copilot-pagine-fl") return { err: `${nome}: non è un file di pagine FL` };
   if (d.versione_formato !== 1) return { err: `${nome}: versione del formato ${d.versione_formato} non supportata da questa app` };
   if (typeof d.fonte !== "string" || !/^[A-Z0-9_]{2,30}$/.test(d.fonte) || typeof d.versione !== "string" || !/^\d{8}-\d{4}$/.test(d.versione))
@@ -73,7 +77,8 @@ async function genImportaImg(files) {
     ko.map(x => fact("Non importato", esc(x.err), "", "N")).join("") + ok.map(x => fact("Importato", esc(x.msg), "", "V")).join(""));
   else if (ok.length) toast(ok.length === 1 ? ok[0].msg : `${ok.length} file di pagine FL importati`);
 }
-// Pagina FL di un viaggio senza IA: prima quella salvata con il viaggio (pacchetto importato, F05), poi quella comune.
+// Pagina FL di un viaggio senza IA: prima la copia salvata con il viaggio (F05, F10), poi quella comune
+// (viaggi salvati prima della 1.0.25, che non hanno la copia).
 // Un pacchetto appena generato (non salvato: senza «importato») usa solo le pagine comuni.
 async function pagina(p, path) {
   let b = null;
@@ -125,14 +130,15 @@ function genEsito(titolo, sub, righe, rapporto) {
 
 async function genGenera(btn) {
   if (GEN.occupato) return;
+  GEN.occupato = true;   // F07: blocco preso subito, prima di ogni attesa
   let T = null; try { T = await DB.getConf("adcdb"); } catch (_) {}
-  if (!T) return toast("Importa prima il database dati di linea");
+  if (!T) { GEN.occupato = false; return toast("Importa prima il database dati di linea"); }
   const testo = $("#gTraccia").value.trim();
   const f = $("#gScheda").files[0] || null;
   const locoUtente = $("#gLoco").value.trim();
-  if (!testo && !f) { $("#gTraccia").focus(); return toast("Serve la traccia Softrail o la Scheda Treno"); }
-  if (locoUtente && !Componi.tipoLoco(locoUtente)) { $("#gLoco").focus(); return toast("Locomotiva non riconosciuta: scrivi ad es. E494 o E494.504"); }
-  GEN.occupato = true; const etichetta = btn.innerHTML; btn.disabled = true; btn.textContent = f ? "Lettura della Scheda Treno…" : "Generazione…";
+  if (!testo && !f) { GEN.occupato = false; $("#gTraccia").focus(); return toast("Serve la traccia Softrail o la Scheda Treno"); }
+  if (locoUtente && !Componi.tipoLoco(locoUtente)) { GEN.occupato = false; $("#gLoco").focus(); return toast("Locomotiva non riconosciuta: scrivi ad es. E494 o E494.504"); }
+  const etichetta = btn.innerHTML; btn.disabled = true; btn.textContent = f ? "Lettura della Scheda Treno…" : "Generazione…";
   try {
     const Tr = testo ? LeggiTraccia.leggi(testo) : null;
     if (Tr && (!Tr.treni.length || !Tr.tratte.length))
@@ -183,7 +189,6 @@ async function genGenera(btn) {
 function genAnteprima() {
   const p = GEN.ultimo; if (!p) return;
   closeSheet();
-  for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
   mostraSI(p);
   toast("Anteprima: il pacchetto non è salvato");
 }
@@ -207,11 +212,15 @@ async function salvaSI(p, nome) {
     try { blobs[path] = await immagineDa(dataUrl); }
     catch (_) { return { err: `${nome}: pagina FL ${path} rovinata o non leggibile, pacchetto non importato` }; }
   }
+  // F10 (scelta A dell'utente, 01/11/2026): ogni viaggio salvato tiene la sua copia delle pagine FL che usa,
+  // così un aggiornamento delle pagine comuni (nuova edizione del FL) non cambia i viaggi già salvati.
+  // Le pagine incorporate nel pacchetto hanno la precedenza; le altre si copiano da quelle comuni del telefono.
   const avvisi = [];
   for (const path of new Set(Object.values(q.condotta.FLPAG || {}).flatMap(g => g.pag.map(x => x.img)))) {
     if (blobs[path]) continue;
     let b = null; try { b = await DB.getImg("fl", path); } catch (_) {}
-    if (!b) avvisi.push(`pagina FL ${path} assente: la scheda la mostrerà come mancante`);
+    if (b) blobs[path] = b;
+    else avvisi.push(`pagina FL ${path} assente: la scheda la mostrerà come mancante`);
   }
   q.importato = new Date().toISOString(); q.avvisi_import = avvisi;
   try { await DB.putSI(q, blobs); } catch (err) { return { err: `${nome}: salvataggio non riuscito (${testoErrore(err)})` }; }
@@ -236,34 +245,48 @@ async function migraSI() {
 }
 async function genLista() {
   const el = $("#viaggiSI"); if (!el) return;
-  let V = []; try { V = await DB.listSI(); } catch (_) {}
-  V.sort((a, b) => dataId(b).localeCompare(dataId(a)) || String(a.id).localeCompare(String(b.id)));
-  el.innerHTML = V.length ? V.map(p => {
-    const id = String(p.id || ""), I = p.intestazione || {};
-    return `<div class="trip"><button class="item" type="button" data-gen="apri" data-id="${esc(id)}"><span><span class="tno">${esc(I.treno)}</span> <small class="tag-si">senza IA</small><br>${esc(I.percorso)}<br><small>${esc(I.data_viaggio)} · ${esc((I.loco || []).map(l => l.etichetta).join(", "))}${p.aperti && p.aperti.length ? ` · ${p.aperti.length} da studiare` : ""}</small></span><small>apri ›</small></button>
+  let V = []; try { V = await DB.listSI(); } catch (err) { el.innerHTML = `<div class="note">Archivio dei viaggi senza IA non leggibile: ${esc(testoErrore(err))}</div>`; return; }
+  V.sort((a, b) => dataId(b).localeCompare(dataId(a)) || String(a && a.id).localeCompare(String(b && b.id)));
+  // F14: ogni record si disegna da solo; uno danneggiato diventa una scheda di recupero (Esporta / Elimina)
+  // e non blocca gli altri.
+  const voce = p => {
+    const id = String(p && p.id || "");
+    const rotto = `<div class="trip"><div class="item row-st bad"><span><b>Viaggio senza IA non leggibile</b><br><small>${esc(id || "senza id")} · danneggiato o salvato con regole vecchie: esportalo o eliminalo</small></span><button class="studia alt" type="button" data-gen="esporta" data-id="${esc(id)}">Esporta</button></div>
+      <button class="del" type="button" data-gen="elimina" data-id="${esc(id)}" aria-label="Elimina viaggio non leggibile">Elimina</button></div>`;
+    if (!valido(p)) return rotto;
+    try {
+      const I = p.intestazione;
+      return `<div class="trip"><button class="item" type="button" data-gen="apri" data-id="${esc(id)}"><span><span class="tno">${esc(I.treno)}</span> <small class="tag-si">senza IA</small><br>${esc(I.percorso)}<br><small>${esc(I.data_viaggio)} · ${esc((I.loco || []).map(l => l.etichetta).join(", "))}${p.aperti && p.aperti.length ? ` · ${p.aperti.length} da studiare` : ""}</small></span><small>apri ›</small></button>
       <button class="del" type="button" data-gen="elimina" data-id="${esc(id)}" aria-label="Elimina ${esc(I.treno)}">Elimina</button></div>`;
-  }).join("") : `<div class="note">Nessun viaggio senza IA salvato. Genera un pacchetto qui sopra e tocca «Salva nei viaggi senza IA».</div>`;
+    } catch (_) { return rotto; }
+  };
+  el.innerHTML = V.length ? V.map(voce).join("") : `<div class="note">Nessun viaggio senza IA salvato. Genera un pacchetto qui sopra e tocca «Salva nei viaggi senza IA».</div>`;
 }
 async function apriSI(id) {
+  const t = navNuova();   // F13
   const p = await DB.getSI(id);
+  if (t !== NAV.n) return;
   if (!p) return toast("Viaggio non trovato");
   const e = (() => { try { return controlla(p); } catch (err) { return [testoErrore(err)]; } })();
   if (e.length) return openSheet(shHead("Viaggio non leggibile", id) + e.slice(0, 8).map(x => fact("Problema", esc(x), "", "N")).join(""));
-  mostraSI(p);
+  if (!(await mostraSI(p, t))) return;
   if (location.hash !== "#s=" + id) history.pushState({ s: id }, "", "#s=" + id);
 }
-async function mostraSI(p) {
+async function mostraSI(p, t = navNuova()) {
   closeSheet();
-  for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
-  imgURLs = await urlPagineFL(p);
-  try { Scheda.show(p, imgURLs); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
+  const urls = await urlPagineFL(p);
+  if (t !== NAV.n) { revoca(urls); return false; }   // F13: nel frattempo l'utente è andato altrove
+  revoca(imgURLs); imgURLs = urls;
+  try { Scheda.show(p, imgURLs); } catch (err) { toast("Scheda non visualizzabile: " + testoErrore(err)); return false; }
   $("#vNota").textContent = "SENZA IA · " + $("#vNota").textContent;
   $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
+  return true;
 }
 async function eliminaSI(id) {
-  const p = await DB.getSI(id);
-  if (!confirm(`Eliminare il viaggio senza IA ${p ? p.intestazione.treno + " del " + p.intestazione.data_viaggio : id}?`)) return;
+  let p = null; try { p = await DB.getSI(id); } catch (_) {}
+  const I = p && p.intestazione && typeof p.intestazione === "object" ? p.intestazione : null;
+  if (!confirm(`Eliminare il viaggio senza IA ${I ? I.treno + " del " + I.data_viaggio : id}?`)) return;
   try { await DB.delSI(id); toast("Viaggio eliminato"); } catch (err) { toast("Eliminazione non riuscita: " + testoErrore(err)); }
   genLista();
 }
@@ -305,8 +328,8 @@ document.addEventListener("click", e => {
   if (g === "esporta") return esportaSI(t.dataset.id);
 });
 document.addEventListener("change", e => {
-  if (e.target && e.target.id === "fDb") { const f = e.target.files[0]; e.target.value = ""; if (f) genImportaDb(f); }
-  if (e.target && e.target.id === "fImg") { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) genImportaImg(fs); }
+  if (e.target && e.target.id === "fDb") { const f = e.target.files[0]; e.target.value = ""; if (f && !syncInCorso()) genImportaDb(f); }
+  if (e.target && e.target.id === "fImg") { const fs = [...e.target.files]; e.target.value = ""; if (fs.length && !syncInCorso()) genImportaImg(fs); }
 });
 genInfo();
 // spostamento una tantum dei viaggi senza IA salvati con la 1.0.17–1.0.19; poi si ridisegna la Home se è visibile
@@ -316,8 +339,8 @@ migraSI().then(m => { if (m && !$("#home").hidden) home(); else genLista(); });
 // La PWA legge export/indice.json del repository privato adc-copilot-db con un token GitHub di SOLA LETTURA
 // salvato solo in questo telefono (archivio conf). Confronta le impronte con i dati del telefono e scarica solo
 // i file cambiati, controllando ogni impronta prima di installarli. Il codice pubblico non contiene né dati né token.
-const SYNC = { owner: "andreaac9120-dot", repo: "adc-copilot-db", ref: "main", dir: "export", occupato: false, controllo: 0,
-  gen: 0, richieste: new Set() };
+const SYNC = { owner: "andreaac9120-dot", repo: "adc-copilot-db", ref: "main", dir: "export", occupato: null, controllo: 0,
+  gen: 0, richieste: new Set(), inControllo: null };
 // F08: ogni cambio del collegamento (token salvato o rimosso) apre una nuova «generazione»: le richieste ancora
 // in corso vengono annullate e le loro risposte ignorate, così una risposta tardiva non rimette il token tolto.
 function syncNuovaGen() {
@@ -333,25 +356,53 @@ function syncScriviStato(gen, token, campi) {
 }
 const RE_FILE_SYNC = /^(adc_linee_\d{8}-\d{4}\.adcdb\.json|pagine\/pagine_[A-Z0-9_]{2,30}_\d{8}-\d{4}\.adcimg\.json)$/;
 async function syncConf() { let c = null; try { c = await DB.getConf("sync"); } catch (_) {} return c || {}; }
-async function ghGet(path, token, gen) {
-  let r;
+// F09: ogni richiesta ha un tempo massimo (risposta 30 s; contenuto 60 s più 1 s ogni 20 KB attesi) e si può
+// annullare; reti assenti, tempi scaduti, 429 e 5xx si riprovano una volta dopo una breve attesa (sono solo letture).
+SYNC.attesa = { risposta: 30000, corpo: 60000, riprova: 2000 };
+const attesaCorpo = byte => SYNC.attesa.corpo + Math.ceil((byte || 0) / 20000) * 1000;
+class SyncRiprova extends Error {}
+async function ghGet(path, token, gen, opz = {}) {
+  const url = opz.url || `https://api.github.com/repos/${SYNC.owner}/${SYNC.repo}/contents/${SYNC.dir}/${path}?ref=${encodeURIComponent(opz.ref || SYNC.ref)}`;
+  for (let tentativo = 0; ; tentativo++) {
+    try { return await ghGetUnaVolta(url, token, gen, opz); }
+    catch (err) {
+      if (!(err instanceof SyncRiprova) || tentativo >= 1 || (gen !== undefined && gen !== SYNC.gen)) throw err;
+      await new Promise(r => setTimeout(r, SYNC.attesa.riprova));
+    }
+  }
+}
+async function ghGetUnaVolta(url, token, gen, opz) {
   const ac = new AbortController(); SYNC.richieste.add(ac);
   if (gen !== undefined && gen !== SYNC.gen) ac.abort();
+  let scaduto = false;
+  const scadenza = ms => setTimeout(() => { scaduto = true; ac.abort(); }, ms);
+  const fermo = () => { if (scaduto) return new SyncRiprova("GitHub non risponde (tempo scaduto)"); if (ac.signal.aborted) return new SyncAnnullato("operazione annullata"); return null; };
+  let timer = scadenza(SYNC.attesa.risposta);
   try {
+    let r;
     try {
-      r = await fetch(`https://api.github.com/repos/${SYNC.owner}/${SYNC.repo}/contents/${SYNC.dir}/${path}?ref=${SYNC.ref}`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" }, cache: "no-store", signal: ac.signal });
-    } catch (_) { if (ac.signal.aborted) throw new SyncAnnullato("operazione annullata"); throw new Error("rete non raggiungibile"); }
-    return await ghRisposta(r, ac);
-  } finally { SYNC.richieste.delete(ac); }
+      r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: opz.accept || "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" },
+        cache: "no-store", signal: ac.signal });
+    } catch (_) { throw fermo() || new SyncRiprova("rete non raggiungibile"); }
+    clearTimeout(timer);
+    if (r.status === 401) throw new Error("token non valido o scaduto: creane uno nuovo su GitHub");
+    if (r.status === 403 && r.headers.get("X-RateLimit-Remaining") === "0") throw new Error("troppe richieste a GitHub, riprova tra poco");
+    if (r.status === 403) throw new Error("il token non ha il permesso di lettura sul repository");
+    if (r.status === 404) throw new Error("repository o file non visibile con questo token (controlla che il token sia per adc-copilot-db)");
+    if (r.status === 429 || r.status >= 500) throw new SyncRiprova(`GitHub ha risposto ${r.status}`);
+    if (!r.ok) throw new Error(`GitHub ha risposto ${r.status}`);
+    timer = scadenza(attesaCorpo(opz.byte));
+    try { return await r.text(); }
+    catch (_) { throw fermo() || new SyncRiprova("download interrotto"); }
+  } finally { clearTimeout(timer); SYNC.richieste.delete(ac); }
 }
-async function ghRisposta(r, ac) {
-  if (r.status === 401) throw new Error("token non valido o scaduto: creane uno nuovo su GitHub");
-  if (r.status === 403) throw new Error(r.headers.get("X-RateLimit-Remaining") === "0" ? "troppe richieste a GitHub, riprova tra poco" : "il token non ha il permesso di lettura sul repository");
-  if (r.status === 404) throw new Error("repository o file non visibile con questo token (controlla che il token sia per adc-copilot-db)");
-  if (!r.ok) throw new Error(`GitHub ha risposto ${r.status}`);
-  try { return await r.text(); }
-  catch (_) { if (ac.signal.aborted) throw new SyncAnnullato("operazione annullata"); throw new Error("download interrotto"); }
+// F09: commit attuale del ramo: indice e file di un aggiornamento si leggono tutti dalla stessa revisione,
+// anche se nel frattempo il repository cambia. Se non si riesce a leggerlo si usa il ramo (come prima).
+async function ghRevisione(token, gen) {
+  try {
+    const sha = (await ghGet("", token, gen, { url: `https://api.github.com/repos/${SYNC.owner}/${SYNC.repo}/commits/${SYNC.ref}`, accept: "application/vnd.github.sha" })).trim();
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : SYNC.ref;
+  } catch (err) { if (err instanceof SyncAnnullato) throw err; return SYNC.ref; }
 }
 function leggiIndice(txt) {
   let d; try { d = JSON.parse(txt); } catch (_) { throw new Error("indice del repository non leggibile"); }
@@ -398,18 +449,26 @@ async function syncStato() {
     avv.textContent = t; avv.hidden = !t;
   }
 }
-async function syncControlla(silenzioso) {
+// F07: un solo controllo e un solo aggiornamento alla volta. Il «blocco» è la Promise dell'operazione, presa prima
+// di qualsiasi attesa: una seconda chiamata (doppio tocco, controllo automatico) riusa quella in corso.
+function syncControlla(silenzioso) {
+  if (SYNC.occupato) return Promise.resolve(null);   // aggiornamento in corso: il controllo finale lo fa lui
+  if (!SYNC.inControllo) SYNC.inControllo = syncControllaOra(silenzioso).finally(() => { SYNC.inControllo = null; });
+  return SYNC.inControllo;
+}
+async function syncControllaOra(silenzioso) {
   const gen = SYNC.gen;
   const c = await syncConf();
-  if (!c.token || SYNC.occupato) return null;
+  if (!c.token) return null;
   if (!navigator.onLine) { if (!silenzioso) toast("Senza rete: riprova quando sei connesso"); return null; }
   SYNC.controllo = Date.now();
   try {
-    const ind = leggiIndice(await ghGet("indice.json", c.token, gen));
+    const ref = await ghRevisione(c.token, gen);
+    const ind = leggiIndice(await ghGet("indice.json", c.token, gen, { ref }));
     const nov = await novita(ind);
     if (!(await syncScriviStato(gen, c.token, { novita: nov, controllo: new Date().toISOString(), errore: "" }))) return null;
     await syncStato();
-    return { ind, nov, token: c.token, gen };
+    return { ind, nov, token: c.token, gen, ref };
   } catch (err) {
     if (err instanceof SyncAnnullato || gen !== SYNC.gen) return null;   // collegamento cambiato nel frattempo
     const errore = testoErrore(err);
@@ -418,21 +477,25 @@ async function syncControlla(silenzioso) {
     return null;
   }
 }
-async function syncAggiorna() {
-  if (SYNC.occupato) return;
+function syncAggiorna() {
+  if (!SYNC.occupato) SYNC.occupato = syncAggiornaOra().finally(() => { SYNC.occupato = null; const b = $("#bSync"); if (b) b.disabled = false; });
+  return SYNC.occupato;
+}
+async function syncAggiornaOra() {
+  const b = $("#bSync"), info = $("#syncInfo");
+  if (b) b.disabled = true;
   const c0 = await syncConf();
   if (!c0.token) return syncCollegamento();
-  const r = await syncControlla(false); if (!r) return;
+  if (SYNC.inControllo) await SYNC.inControllo.catch(() => {});   // un controllo automatico già partito
+  const r = await syncControllaOra(false); if (!r) return;
   if (!r.nov.length) return toast("Dati già aggiornati");
-  const b = $("#bSync"), info = $("#syncInfo");
-  SYNC.occupato = true; b.disabled = true;
   const ok = [], ko = [];
   try {
     for (const [k, x] of r.nov.entries()) {
       if (r.gen !== SYNC.gen) { ko.push(`${x.nome}: annullato (collegamento cambiato)`); continue; }
       info.textContent = `Scarico ${k + 1}/${r.nov.length}: ${x.nome}${x.byte ? " · " + mb(x.byte) : ""}…`;
       try {
-        const txt = await ghGet(x.file, r.token, r.gen);
+        const txt = await ghGet(x.file, r.token, r.gen, { ref: r.ref, byte: x.byte });
         if (r.gen !== SYNC.gen) throw new SyncAnnullato("annullato (collegamento cambiato)");
         if (x.tipo === "db") {
           const v = await AdcDb.controlla(txt);
@@ -449,8 +512,7 @@ async function syncAggiorna() {
       } catch (err) { ko.push(`${x.nome}: ${testoErrore(err)}`); }
     }
   } finally {
-    SYNC.occupato = false; b.disabled = false;
-    await syncControlla(true); await genInfo();
+    await syncControllaOra(true).catch(() => {}); await genInfo();
   }
   if (ko.length) openSheet(shHead("Aggiornamento dati", `${ok.length} aggiornati · ${ko.length} non riusciti`) +
     ko.map(x => fact("Non aggiornato", esc(x), "", "N")).join("") + ok.map(x => fact("Aggiornato", esc(x), "", "V")).join("") +

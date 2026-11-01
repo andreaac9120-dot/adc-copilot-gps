@@ -29,6 +29,7 @@ const GPS = (() => {
     return r ? `${r.n} · km ${r.km} · riga ${i+1}/${rows.length}` : "Nessuna riga";
   }
   function segna(i, centro, extra = "") {
+    if (i === null || i === undefined || !Number.isFinite(i)) return;   // F11: mai una riga scelta «per caso»
     indice = Math.max(0, Math.min(rows.length-1, i));
     if (typeof Scheda !== "undefined" && Scheda.marcaRiga) Scheda.marcaRiga(indice, centro);
     stato(`${enabled ? "GPS attivo" : "Manuale"}: ${descrizione(indice)}${extra ? " · " + extra : ""}`);
@@ -99,7 +100,13 @@ const GPS = (() => {
     if (e && e.code === 1) close();
   }
   function toggle() {
-    if (enabled) { close(); segna(indice, false, "GPS spento; avanza con le frecce."); return; }
+    if (enabled) {
+      close();
+      // F11: senza una riga già determinata (fix accettato o frecce) spegnere il GPS non seleziona nulla
+      if (indice === null) stato("GPS spento. Posizione non determinata: avanza con le frecce.");
+      else segna(indice, false, "GPS spento; avanza con le frecce.");
+      return;
+    }
     if (!P) return;
     if (localita.length === 0) {
       stato("Impossibile attivare il GPS: mancano coordinate verificate delle località nel campo condotta.GEO. Richiedi un pacchetto aggiornato.");

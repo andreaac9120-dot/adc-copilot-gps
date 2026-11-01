@@ -114,3 +114,21 @@ test("background conserva ON, ripresa senza duplicati e stop definitivo", () => 
   assert.equal(watches.length, 4);
   assert.deepEqual(cleared, [1, 2, 3, 4]);
 });
+
+test("F11: spegnere il GPS prima di un fix non seleziona la prima riga", () => {
+  const calls = [], elements = new Map();
+  const context = vm.createContext({
+    document: { querySelector: s => { if (!elements.has(s)) elements.set(s, { textContent: "", setAttribute() {}, classList: { toggle() {} } }); return elements.get(s); } },
+    navigator: { geolocation: { watchPosition: () => 1, clearWatch() {} } },
+    isSecureContext: true, Scheda: { marcaRiga: (i, c) => calls.push([i, c]) }, Date, Math
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "gps.js"), "utf8"), context);
+  const GPS = vm.runInContext("GPS", context);
+  GPS.open({ condotta: { R: [{ t: "loc", id: "a", n: "A", km: "0" }, { t: "loc", id: "b", n: "B", km: "10" }],
+    GEO: { a: { lat: 45, lon: 9, st: "V", src: "f" }, b: { lat: 46, lon: 10, st: "V", src: "f" } } } });
+  GPS.handle("toggle"); GPS.handle("toggle");
+  assert.deepEqual(calls, []);
+  assert.match(elements.get("#gpsStatus").textContent, /Posizione non determinata/);
+  GPS.handle("next");                    // la selezione manuale resta possibile
+  assert.deepEqual(calls, [[0, true]]);
+});
