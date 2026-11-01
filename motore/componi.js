@@ -78,7 +78,7 @@
   function componi(T, Tr0, S, locoUtente) {
     if (!Tr0 && !S) throw new Error("serve la traccia o la Scheda Treno");
     const Tr = Tr0 || tracciaDaScheda(S);
-    const R = [];
+    const R = [], discrepanze = [];
     const locDb = T.localita;
     const locPer = new Map(locDb.map(l => [l.loc_id, l]));
     const punti = T.punti_linea.filter(p => locPer.has(p.loc_id)).map(p => Object.assign({}, p, { nome: locPer.get(p.loc_id).nome }));
@@ -102,9 +102,27 @@
       R.push(`SCHEDA: treno ${ps(h.treno)} · sigla ${ps(h.sigla)} ${ps(h.freno)} · FL ${(h.fl || []).join(" ")} · ` +
         `valida per il ${ps(h.valida_per)} · mezzo intestatario della sigla ${ps(h.mezzo_sigla)} ${h.rsc !== undefined ? ps(h.rsc) : ""}`);
       for (const c of S.controlli) R.push(`  ! scheda: ${c}`);
+      // Identità dei documenti (F03): data e numeri treno della Scheda devono essere quelli della traccia.
+      // Un'incompatibilità ferma la composizione: i valori della Scheda di un altro treno o giorno non si uniscono.
+      const ferma = msg => { R.push(`  ! ERRORE: ${msg}`); return { viaggio: null, rapporto: R, ok: false, errore: msg }; };
+      const dateScheda = [...new Set(S.pagine.map(p => p.valida_per).filter(x => x))];
+      if (dateScheda.length > 1) return ferma(`le pagine della Scheda Treno sono valide per date diverse (${dateScheda.join(", ")}): usare la Scheda di un solo treno`);
       if (h.valida_per && !Tr.da_scheda) {
         const [g, m_, a] = h.valida_per.split("/");
-        if (`${a}-${m_}-${g}` !== Tr.data) R.push(`  ! DISCREPANZA: Scheda valida per il ${h.valida_per}, traccia del ${Tr.data}`);
+        if (`${a}-${m_}-${g}` !== Tr.data)
+          return ferma(`Scheda Treno valida per il ${h.valida_per}, traccia del ${Tr.data}: non sono lo stesso viaggio (caricare la Scheda giusta, oppure generare con uno solo dei due documenti)`);
+      }
+      if (!Tr.da_scheda) {
+        const nt = x => String(x).replace(/^0+(?=\d)/, "");
+        const numTraccia = new Set(Tr.treni.concat(Tr.tratte.map(t => t.cambio_numero).filter(x => x)).map(nt));
+        const numScheda = [...new Set(S.pagine.flatMap(p => String(p.treno || "").split("/")).filter(x => x).map(nt))];
+        const estranei = numScheda.filter(n => !numTraccia.has(n));
+        if (numScheda.length && estranei.length === numScheda.length)
+          return ferma(`la Scheda Treno è del treno ${numScheda.join("/")}, la traccia del treno ${[...numTraccia].join("/")}: non sono lo stesso viaggio (caricare la Scheda giusta, oppure generare con uno solo dei due documenti)`);
+        if (estranei.length) {
+          const d = `numeri treno della Scheda non presenti nella traccia: ${estranei.join(", ")} (traccia: ${[...numTraccia].join("/")})`;
+          R.push(`  ! DISCREPANZA: ${d}`); discrepanze.push(d);
+        }
       }
       const tipiTraccia = new Set(loco.map(l => l.tipo));
       if (h.mezzo_sigla && !tipiTraccia.has(h.mezzo_sigla))
@@ -145,9 +163,9 @@
         }
         if (r.tipo === "loc" || cand.length) {
           sequenza.push({ riga: r, cand });
-          if (cand.length) ultima = cand[0][0];
-        } else if (ultima && r.km.length) {
-          const ps = { dopo: ultima, km: r.km[0], n: r.nome };
+          if (cand.length) ultima = sequenza.length - 1;   // indice dell'ultima località riconosciuta
+        } else if (ultima !== null && r.km.length) {
+          const ps = { dopo: ultima, km: r.km[0], n: r.nome };   // indice della località: diventa l'id del passaggio più sotto
           for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) ps[k2] = r[k1];
           puntiScheda.push(ps);
         }
@@ -169,8 +187,8 @@
     if (mancanti.length) R.push("  Località non presenti nel database (da caricare): " + mancanti.map(m => `${m.nome} (${m.km.join("/")})`).join(", "));
 
     const su = (k, linea) => sequenza[k].cand.find(c => c[1] === linea) || null;
-    const itinerario = [], scheda = {};
-    let i = 0;
+    const itinerario = [], scheda = {}, estremi = [];   // estremi: indici in «sequenza» di inizio e fine di ogni tratto
+    let i = 0, ambigua = null;
     while (i < sequenza.length) {
       if (!sequenza[i].cand.length) {
         if (itinerario.length) R.push(`  ! itinerario interrotto: «${sequenza[i].riga.nome}» non è nel database`);
@@ -191,21 +209,48 @@
       if (migliore === i) { i++; continue; }
       if (scelte.length > 1) {
         R.push(`  ! ${sequenza[i].riga.nome}: più linee possibili [${scelte.sort().map(x => "'" + x + "'").join(", ")}]: serve la scelta dell'utente`);
+        ambigua = `${sequenza[i].riga.nome}: più linee possibili (${scelte.sort().join(", ")})`;
         break;
       }
       const linea = scelte[0];
       itinerario.push({ da: su(i, linea)[0], a: su(migliore, linea)[0], linea });
+      estremi.push([i, migliore]);
       i = migliore < sequenza.length - 1 ? migliore : sequenza.length;
     }
+    // Valori della Scheda per PASSAGGIO (F01): una località attraversata più volte ha id loc_1, loc_2, …
+    // come le righe del generatore, così il secondo passaggio non sovrascrive il primo.
+    const contaPass = {}, vistiPass = {};
+    for (const s of sequenza) if (s.cand.length) contaPass[s.cand[0][0]] = (contaPass[s.cand[0][0]] || 0) + 1;
     for (const s of sequenza) {
-      if (s.cand.length) {
-        const r = s.riga, val = {};
-        for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) val[k2] = r[k1];
-        if (Object.keys(val).length) scheda[s.cand[0][0]] = val;
-      }
+      if (!s.cand.length) continue;
+      const loc = s.cand[0][0];
+      vistiPass[loc] = (vistiPass[loc] || 0) + 1;
+      s.id = contaPass[loc] === 1 ? loc : `${loc}_${vistiPass[loc]}`;
+      const r = s.riga, val = {};
+      for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) val[k2] = r[k1];
+      if (Object.keys(val).length) scheda[s.id] = val;
     }
+    for (const ps of puntiScheda) ps.dopo = sequenza[ps.dopo].id;
     for (let k = 0; k + 1 < itinerario.length; k++)
       if (itinerario[k].a !== itinerario[k + 1].da) R.push(`  ! itinerario non continuo tra ${itinerario[k].a} e ${itinerario[k + 1].da}`);
+
+    // Copertura dell'itinerario (F02): completa solo se i tratti coprono, senza vuoti, TUTTA la sequenza
+    // dalla prima all'ultima località (della Scheda o della traccia). Altrimenti il viaggio è PARZIALE.
+    const lacune = [];
+    const nomiTra = (a, b) => sequenza.slice(a, b).map(s => s.riga.nome).join(", ");
+    if (!itinerario.length) lacune.push("nessun tratto riconosciuto");
+    else {
+      if (estremi[0][0] > 0) lacune.push(`origine non riconosciuta: ${nomiTra(0, estremi[0][0])}`);
+      for (let k = 0; k + 1 < estremi.length; k++)
+        if (estremi[k + 1][0] !== estremi[k][1] || itinerario[k].a !== itinerario[k + 1].da)
+          lacune.push(`vuoto tra ${sequenza[estremi[k][1]].riga.nome} e ${sequenza[estremi[k + 1][0]].riga.nome}` +
+            (estremi[k + 1][0] - estremi[k][1] > 1 ? `: ${nomiTra(estremi[k][1] + 1, estremi[k + 1][0])}` : ""));
+      const fine = estremi[estremi.length - 1][1];
+      if (ambigua) lacune.push(ambigua);
+      if (fine < sequenza.length - 1) lacune.push(`destinazione non raggiunta: mancano ${nomiTra(fine + 1, sequenza.length)}`);
+    }
+    const completo = !lacune.length;
+    if (!completo) { R.push("  ! ITINERARIO PARZIALE: il pacchetto non copre tutto il viaggio"); for (const l of lacune) R.push(`    - ${l}`); }
 
     // colonna delle Sigle
     let colonna = null;
@@ -238,12 +283,12 @@
       colonna_sigle: colonna || "",
       input: { tipo: S ? "scheda_treno" : "traccia", fase: S ? "completa" : "fase1_traccia",
         descrizione: "composto dal motore della PWA (" + (Tr.da_scheda ? "" : "traccia Softrail") + (S && !Tr.da_scheda ? " + " : "") + (S ? "Scheda Treno PDF" : "") + ")" },
-      itinerario, scheda, punti_scheda: puntiScheda,
+      itinerario, copertura: { completa: completo, lacune }, discrepanze, scheda, punti_scheda: puntiScheda,
       prescrizioni: S ? { riepilogo: S.riepilogo === undefined ? null : S.riepilogo, moduli: S.moduli || [],
         fonte: `Scheda Treno SKT-M3M40 valida per il ${S.intestazione.valida_per || "?"}, moduli richiamati` } : null
     };
     R.push(`ITINERARIO per il generatore: ${itinerario.length} tratti ` + itinerario.map(t => `${t.da} → ${t.a} (${t.linea})`).join("; "));
-    return { viaggio, rapporto: R, ok: itinerario.length > 0 };
+    return { viaggio, rapporto: R, ok: itinerario.length > 0, completo, lacune };
   }
 
   const API = { componi, norm, simile, allinea, tipoLoco };

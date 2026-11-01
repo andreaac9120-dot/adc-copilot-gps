@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.23 — versione unica
+# ADC COPILOT 1.0.24 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -9,6 +9,8 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
 ## Generatore senza IA (prova, 1.0.17–1.0.23)
+
+1.0.24: correzioni dal rapporto di debug del 29/10/2026 (punti P1). **F01** i valori della Scheda (velocità, grado, indicatore) restano del loro passaggio nelle località attraversate più volte (`loc_1`, `loc_2`…). **F02** se l'itinerario non copre tutto il viaggio il pacchetto è segnato «ITINERARIO PARZIALE» (chip, percorso, primo punto aperto) e il salvataggio chiede conferma. **F03** Scheda Treno di un altro giorno o di un altro treno: non viene unita alla traccia; numeri in parte diversi restano come discrepanza nel pacchetto. **F05** un pacchetto senza IA importato (anche da un altro telefono) conserva le pagine FL incorporate, salvate con il viaggio. **F06** database + informazioni e pagine FL + catalogo si salvano in una sola transazione: un errore non lascia mai metà dei dati. **F08** «Rimuovi token» annulla le richieste in corso: una risposta tardiva non rimette più il token. Prove: `node tests/debug-astra.test.js`.
 
 1.0.23: tasto «Aggiorna dati». Con un token GitHub fine-grained di sola lettura (solo `adc-copilot-db`, Contents: Read-only), salvato solo nel telefono con «Collegamento», la PWA legge `export/indice.json` del repository privato, confronta le impronte con database e pagine FL del telefono e, se c'è qualcosa di nuovo, colora il tasto di rosso con l'elenco delle novità. Toccandolo scarica solo i file cambiati e ne ricontrolla l'impronta prima di installarli; se un file non torna resta quello di prima. Controllo automatico all'avvio, al ritorno della rete e alla riapertura (al massimo ogni 15 minuti); avviso 21 giorni prima della scadenza del token, se indicata. L'importazione manuale resta.
 

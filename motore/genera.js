@@ -127,7 +127,21 @@
     for (const o of occ) conta[o.loc] = (conta[o.loc] || 0) + 1;
     for (const o of occ) { visti[o.loc] = (visti[o.loc] || 0) + 1; o.id = conta[o.loc] === 1 ? o.loc : `${o.loc}_${visti[o.loc]}`; }
     const kmSu = (t, loc) => t.punti.find(p => p.loc_id === loc).km;
-    const sch = o => get(scheda, o.id) || get(scheda, o.loc) || {};
+    // Valori della Scheda per passaggio (F01): chiave = id della riga (loc, oppure loc_1, loc_2… se ripetuta).
+    // Una chiave semplice vale solo per una località attraversata una volta; se non si sa a quale
+    // passaggio appartiene un valore, non si assegna e si apre un punto da verificare.
+    const dubbiScheda = new Set();
+    const sch = o => {
+      if (has(scheda, o.id)) return scheda[o.id];
+      const ripetuta = conta[o.loc] > 1, alt = ripetuta ? (has(scheda, o.loc) ? [o.loc] : [])
+        : Object.keys(scheda).filter(k => k.startsWith(o.loc + "_") && /^\d+$/.test(k.slice(o.loc.length + 1)));
+      if (alt.length && !dubbiScheda.has(o.loc)) {
+        dubbiScheda.add(o.loc);
+        aperti.push({ cosa: `Valori della Scheda Treno per ${o.nome}: non è chiaro a quale passaggio appartengono (${alt.join(", ")})`,
+          motivo: "da_studiare", richiesta: `STUDIA SOLO valori della Scheda Treno (velocità, grado, indicatore) di ${o.nome} per ogni passaggio – ${TRENO}` });
+      }
+      return {};
+    };
 
     const R = [];
     for (const o of occ) {
@@ -373,14 +387,22 @@
       const r = db.fonti.get("RINF_GPS17");
       if (r) fonti.push({ doc: r.documento, edizione: r.edizione, uso: r.note || "" });
     }
+    // Itinerario parziale (F02): resta visibile nell'intestazione e tra i punti aperti, il pacchetto non passa per completo.
+    const parziale = !!(V.copertura && V.copertura.completa === false);
+    if (parziale)
+      aperti.unshift({ cosa: "ITINERARIO PARZIALE – il pacchetto non copre tutto il viaggio: " + ((V.copertura.lacune || []).join("; ") || "copertura incompleta"),
+        motivo: "da_studiare", richiesta: `STUDIA SOLO tratti mancanti dell'itinerario (${(V.copertura.lacune || []).join("; ")}) – ${TRENO}` });
+    // Discrepanze traccia ⇆ Scheda rimaste dopo la composizione (F03): restano nel pacchetto
+    for (const d of (V.discrepanze || []))
+      aperti.push({ cosa: `Discrepanza traccia ⇆ Scheda Treno: ${d}`, motivo: "da_studiare", richiesta: `STUDIA SOLO verifica della Scheda Treno (${d}) – ${TRENO}` });
     const nomi = [occ[0].nome, occ[occ.length - 1].nome];
     const quando = (ora || new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
     const intestazione = {
       treno: V.treno_testo || `${treno}`,
-      percorso: nomi.join(" → "),
+      percorso: nomi.join(" → ") + (parziale ? " (ITINERARIO PARZIALE)" : ""),
       data_viaggio: dataIt,
       loco: V.loco.map(l => ({ tipo: l.tipo, etichetta: l.etichetta || l.tipo, tratti: Object.keys(SEG) })),
-      chip: [V.sigla, unici(Object.values(SEG).map(s => s.fl)).join(", ")].filter(x => x)
+      chip: [parziale ? "ITINERARIO PARZIALE" : "", V.sigla, unici(Object.values(SEG).map(s => s.fl)).join(", ")].filter(x => x)
     };
     if (PRESC) {
       intestazione.prescrizioni_chip = `Prescrizioni: ${PRESC.moduli.filter(m => m.tipo === "M3").length} M3 · ${PRESC.moduli.filter(m => m.tipo !== "M3").length} M40`;

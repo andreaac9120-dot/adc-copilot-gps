@@ -25,7 +25,7 @@ const Scheda = (() => {
     $("#vPercorso").textContent = I.percorso;
     $("#vLoco").innerHTML = I.loco.map((l, k) => `<button class="chip loco" type="button" data-loco="${k}">${esc(l.etichetta)} ▾</button>`).join("");
     const ap = pkg.aperti || [];
-    $("#vMeta").innerHTML = (I.chip || []).map(c => `<span class="chip">${esc(c)}</span>`).join("") +
+    $("#vMeta").innerHTML = (I.chip || []).map(c => `<span class="chip${c === "ITINERARIO PARZIALE" ? " warnchip" : ""}">${esc(c)}</span>`).join("") +
       (PRESC ? `<button class="chip warnchip" type="button" data-presc="1">${esc(I.prescrizioni_chip || "Prescrizioni")} ▾</button>` : "") +
       (pkg.formazione ? `<button class="chip" type="button" data-form="1">Formazione ▾</button>` : "") +
       (ap.length ? `<button class="chip warnchip" type="button" data-aperti="1">Da studiare: ${ap.length} ▾</button>` : "") +
