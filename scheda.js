@@ -42,7 +42,7 @@ const Scheda = (() => {
 
   // Il colore usa i dati originali; il nome mostrato non ripete l'esito testuale.
   const nomeAff = l => String(l.linea || "").split("·")
-    .map(x => x.trim()).filter(x => x && !/^(?:NON\s+)?PERCORRIBILE$/i.test(x)).join(" · ");
+    .map(x => x.trim()).filter(x => x && !/^(?:NON\s+)?PERCORRIBILE$/i.test(x) && !/^NON\s+il\s+tuo\b/i.test(x)).join(" · ");
 
   // Usa gli esiti e le condizioni già salvati nel viaggio, senza ricalcolare la percorribilità.
   function statoAff(l) {
@@ -130,26 +130,36 @@ const Scheda = (() => {
   }
   function indicatori(i) {
     const r = R[i], d = IND?.[r.id], linee = AFFLOC?.[r.id] || [], tutti = d?.tutti || [];
-    const usate = new Set();
-    const affRiga = (l, k, direzione = "", nota = "") => {
-      const stato = statoAff(l), gialla = stato !== "ordinaria";
-      const label = stato === "non_percorribile" ? "Linea non percorribile: leggi le note" : "Condizioni della linea: leggi le note";
-      return `<div class="item direction-line"><button class="direction-open" type="button" data-sig="${i}:${k}" data-sig-back="ind"><span class="ind">${esc(l.ind)}</span><span class="direction-name">${esc(nomeAff(l))}<small>${esc([direzione === l.linea ? "" : direzione, l.tratto, l.fl, nota].filter(Boolean).join(" · "))}</small></span></button>${gialla ? `<button class="affA affA-dubbio" type="button" data-aff-note="${i}:${k}" aria-label="${label}" aria-haspopup="dialog">A</button>` : `<span class="affA" aria-label="Linea affiancata rispetto al tuo percorso">A</span>`}</div>`;
-    };
-    const righe = tutti.map(x => {
-      // Una cifra ripetuta su più segnali non identifica da sola una linea.
-      const candidate = linee.map((l, k) => ({ l, k })).filter(({ l }) => l.ind === x[0]);
-      if (candidate.length === 1 && tutti.filter(y => y[0] === x[0]).length === 1) {
-        const { l, k } = candidate[0]; usate.add(k); return affRiga(l, k, x[1], x[2]);
-      }
-      return `<div class="item direction-line"><span class="ind">${esc(x[0])}</span><span class="direction-name"><span class="dot d-${ST(d.st)}"></span>${esc(x[1])}${x[2] ? `<small>${esc(x[2])}</small>` : ""}</span></div>`;
-    }).join("") + linee.map((l, k) => usate.has(k) ? "" : affRiga(l, k)).join("");
+    const key = n => /^\d+$/.test(String(n).trim()) ? String(Number(n)) : String(n).trim();
+    const gruppi = new Map();
+    const gruppo = n => { const k = key(n); if (!gruppi.has(k)) gruppi.set(k, { numero: k, segnali: [], linee: [] }); return gruppi.get(k); };
+    tutti.forEach(x => {
+      const g = gruppo(x[0]);
+      if (!g.segnali.some(y => y[1] === x[1] && y[2] === x[2])) g.segnali.push(x);
+    });
+    linee.forEach((l, k) => gruppo(l.ind).linee.push({ l, k }));
+    const mio = key(r.ind || d?.treno || "");
+    const righe = [...gruppi.values()].sort((a, b) => a.numero.localeCompare(b.numero, "it", { numeric: true })).map(g => {
+      const mie = g.numero === mio;
+      const lineeHtml = g.linee.map(({ l, k }) => {
+        const stato = statoAff(l), gialla = stato !== "ordinaria";
+        const label = stato === "non_percorribile" ? "Linea non percorribile: leggi le note" : "Condizioni della linea: leggi le note";
+        return `<div class="direction-route"><button class="direction-open" type="button" data-sig="${i}:${k}" data-sig-back="ind"><span class="direction-name">${esc(nomeAff(l))}<small>${esc([l.tratto, l.fl].filter(Boolean).join(" · "))}</small></span></button>${gialla ? `<button class="affA affA-dubbio" type="button" data-aff-note="${i}:${k}" aria-label="${label}" aria-haspopup="dialog">A</button>` : `<span class="affA affA-verde" aria-label="Linea affiancata rispetto al tuo percorso">A</span>`}</div>`;
+      }).join("");
+      const primo = g.segnali[0];
+      const titolo = primo ? primo[1].replace(/^.*?:\s*/, "") : "Direzione non disponibile";
+      const descr = lineeHtml || `<div class="direction-name">${esc(titolo)}</div>`;
+      // La cifra compare una volta sola; i contesti dei diversi segnali restano consultabili.
+      const dettagli = g.segnali.length ? `<details class="direction-signals"><summary>Dettagli segnali${g.segnali.length > 1 ? ` (${g.segnali.length})` : ""}</summary>${g.segnali.map(x => `<div class="direction-signal"><span class="dot d-${ST(d.st)}"></span>${esc(x[1])}${x[2] ? `<small>${esc(x[2])}</small>` : ""}</div>`).join("")}</details>` : "";
+      return `<div class="item direction-group" data-indicator="${esc(g.numero)}"><span class="ind${mie ? " ind-current" : ""}"${mie ? ` aria-label="Indicatore ${esc(g.numero)} del tuo percorso"` : ""}>${esc(g.numero || "—")}</span><div class="direction-content">${descr}${dettagli}</div></div>`;
+    }).join("");
     openSheet(shHead("Indicatori di direzione", r.n, "loc:" + i) +
-      `<div class="note">Il tuo indicatore: <b>${esc(r.ind || d?.treno || "non disponibile")}</b></div>` +
+      `<div class="note direction-legend">Cerchio rosso = il tuo indicatore · A verde = linea affiancata · A gialla = dubbi o restrizioni</div>` +
       (righe ? `<div class="menu direction-list">${righe}</div>` : stItem("Indicatori di direzione", "indicatori di direzione (schema unifilare)", i)) +
-      (linee.length ? `<div class="note">A = linea affiancata rispetto al tuo percorso. Tocca la linea per le Sigle Complementari. Tocca la A gialla per le note di non percorribilità o le condizioni da verificare.</div>` : "") +
+      (linee.length ? `<div class="note">Tocca la linea per le Sigle Complementari, la A gialla per le note.</div>` : "") +
       `${d?.nota ? `<div class="note">${esc(d.nota)}</div>` : ""}<div class="note">${esc(d?.src)}</div>`);
   }
+
   function plprot(i) {
     const r = R[i], d = PLPROT[r.id];
     openSheet(shHead("PL protetti dai segnali", r.n, "loc:" + i) +
