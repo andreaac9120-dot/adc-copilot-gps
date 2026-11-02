@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.30 — versione unica
+# ADC COPILOT 1.0.31 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -10,7 +10,9 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 
 ## Generatore senza IA (prova, 1.0.17–1.0.23)
 
-1.0.30: colonna delle Sigle Complementari con la regola del macchinista: velocità e percentuale di massa frenata del treno uguali o più piccole di quelle della colonna (stesso rango; colonne G solo per treni in regime G); tra le colonne valide la più vicina. La sigla si legge sulla pagina della Scheda di ogni tratto (es. DE18 G60% e poi E494 P55%). Prima serviva la stessa velocità e una percentuale non superiore a quella del treno: con M100A P55% nessuna colonna era valida e le affiancate uscivano con la A gialla.
+1.0.31: corretta la regola della 1.0.30 (indicazione dell'utente): le Sigle Complementari devono essere più restrittive della sigla della Scheda. Valida la colonna con velocità e percentuale UGUALI O PIÙ PICCOLE di quelle del treno (stesso rango, regime G con G); tra le valide la più vicina al treno (velocità più alta, poi percentuale più alta).
+
+1.0.30 (regola sostituita dalla 1.0.31): colonna delle Sigle Complementari con la regola del macchinista: velocità e percentuale di massa frenata del treno uguali o più piccole di quelle della colonna (stesso rango; colonne G solo per treni in regime G); tra le colonne valide la più vicina. La sigla si legge sulla pagina della Scheda di ogni tratto (es. DE18 G60% e poi E494 P55%). Prima serviva la stessa velocità e una percentuale non superiore a quella del treno: con M100A P55% nessuna colonna era valida e le affiancate uscivano con la A gialla.
 
 1.0.29: generatore senza IA con la sola Scheda Treno (prova reale treno 47033 del 02/11/2026, prima pagina intestata DE18 senza «Valida per»). Data del treno dalla prima pagina che la riporta; mezzo intestatario anche diesel (DE18); senza traccia le locomotive vengono dai mezzi intestatari di ogni pagina, ognuna sul suo tratto. A parità di linee si sceglie quella coerente con le progressive doppie della Scheda (prima = arrivo, ultima = partenza: inversione ad Alessandria Sm); a parità di progressiva vince il nome più simile; tolleranza di 2 m inclusa. PL, P.L.A., Plp e RTB della Scheda non entrano nel pacchetto. Stesse correzioni nei programmi Python del database (commit 5e73e9e). Serve il database del 02/11/2026 ore 10:18 o successivo.
 

@@ -305,9 +305,10 @@
     if (loco.some(l => l.tratti)) R.push("LOCOMOTIVE per tratto: " + loco.map(l => `${l.etichetta} ${l.tratti ? l.tratti.map(k => String.fromCharCode(65 + k)).join("") || "nessuno" : "tutti"}`).join(", "));
     if (!completo) { R.push("  ! ITINERARIO PARZIALE: il pacchetto non copre tutto il viaggio"); for (const l of lacune) R.push(`    - ${l}`); }
 
-    // colonna delle Sigle (regola confermata dall'utente il 02/11/2026): velocità e percentuale di massa frenata del treno
-    // UGUALI O PIÙ PICCOLE di quelle della colonna (stesso rango; colonne «G» solo per treni in regime G e viceversa);
-    // tra le colonne valide la più vicina (velocità più bassa, poi percentuale più bassa). Sigla e percentuale dalla
+    // colonna delle Sigle (regola dell'utente, corretta il 02/11/2026): le Sigle Complementari devono essere PIÙ RESTRITTIVE
+    // della sigla della Scheda: velocità e percentuale della colonna UGUALI O PIÙ PICCOLE di quelle del treno (stesso rango;
+    // colonne «G» solo per treni in regime G e viceversa); tra le valide la più vicina al treno (velocità più alta, poi
+    // percentuale più alta). Sigla e percentuale dalla
     // pagina della Scheda di ogni tratto (es. pag. 1 DE18 G60%, pag. 2–4 E494 P55%).
     const titoli = [], vistiT = new Set();
     for (const r of T.sigle) { const k = JSON.stringify([r.colonna, r.titolo]); if (!vistiT.has(k)) { vistiT.add(k); titoli.push([r.colonna, r.titolo]); } }
@@ -317,11 +318,12 @@
       const v = +m[1], rango = m[2], g = mf[1] === "G", perc = +mf[2], valide = [];
       for (const [col, tit] of titoli) {
         const mt = /^\*?(\d+)([ABCP])\s+(G?)(\d+)%/.exec(tit);
-        if (mt && mt[2] === rango && (mt[3] === "G") === g && +mt[1] >= v && +mt[4] >= perc) valide.push([+mt[1], +mt[4], col, tit]);
+        if (mt && mt[2] === rango && (mt[3] === "G") === g && +mt[1] <= v && +mt[4] <= perc) valide.push([+mt[1], +mt[4], col, tit]);
       }
       if (!valide.length) return [null, null];
-      const cmp = (x, y) => (x[0] - y[0]) || (x[1] - y[1]) || (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0) || (x[3] < y[3] ? -1 : x[3] > y[3] ? 1 : 0);
-      const best = valide.reduce((a, b) => (cmp(b, a) < 0 ? b : a));
+      // la più vicina al treno: velocità più alta, poi percentuale più alta (a parità, la colonna con numero più basso)
+      const cmp = (x, y) => (x[0] - y[0]) || (x[1] - y[1]) || (x[2] < y[2] ? 1 : x[2] > y[2] ? -1 : 0);
+      const best = valide.reduce((a, b) => (cmp(b, a) > 0 ? b : a));
       return [best[2], best[3]];
     };
     let colonna = null;
