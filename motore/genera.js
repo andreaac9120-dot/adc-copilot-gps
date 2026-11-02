@@ -105,7 +105,7 @@
       let punti = ordina(T.punti_linea.filter(p => p.linea_id === lid && between(p.km, lo, hi) && db.localita.has(p.loc_id)), (x, y) => cmpStr(x.loc_id, y.loc_id))
         .map(p => Object.assign({}, p, { nome: db.localita.get(p.loc_id).nome }));
       punti = ordina(punti, cresce ? ((x, y) => x.km - y.km) : ((x, y) => y.km - x.km));
-      tratti.push({ lettera: String.fromCharCode(65 + i), linea, senso, da, a, km_da: pDa.km, km_a: pA.km, lo, hi, cresce, punti, ultimo: i === V.itinerario.length - 1 });
+      tratti.push({ lettera: String.fromCharCode(65 + i), linea, senso, da, a, col: t.colonna_sigle, sigla: t.sigla, km_da: pDa.km, km_a: pA.km, lo, hi, cresce, punti, ultimo: i === V.itinerario.length - 1 });
       usa(linea.fonte);
       if (i && tratti[i - 1].a !== da) throw new Errore(`itinerario non continuo: ${tratti[i - 1].a} → ${da}`);
     });
@@ -546,7 +546,11 @@
     // colonna delle Sigle: le linee affiancate si percorrono nello stesso senso di marcia del treno
     let colonna = null;
     const sensoO = (o.out || o.inn).senso;
-    const colId = String(V.colonna_sigle === undefined || V.colonna_sigle === null ? "" : V.colonna_sigle);
+    // colonna del tratto (sigla della pagina della Scheda); altrimenti quella del viaggio
+    const tRif = o.out || o.inn;
+    const colSrc = tRif.col !== undefined && tRif.col !== null ? tRif.col : V.colonna_sigle;
+    const colId = String(colSrc === undefined || colSrc === null ? "" : colSrc);
+    const siglaT = tRif.sigla || V.sigla || "";
     const sig = colId ? ordina(T.sigle.filter(r => r.linea_id === ol.linea_id && r.senso === (sensoO || "") && r.colonna === colId),
       (x, y) => cmpStr(x.sezione, y.sezione), (x, y) => cmpStr(x.binario, y.binario), (x, y) => x.ordine - y.ordine) : [];
     if (sig.length) {
@@ -558,7 +562,7 @@
       const pieni = Object.keys(lati).length > 0;
       for (const b of ["sx", "dx"]) if (!(b in lati) && pieni) lati[b] = { pag: "—", sez: `binario ${b === "dx" ? "destro" : "sinistro"} non trascritto nel database`, rows: [] };
       if ("sx" in lati && "dx" in lati)
-        colonna = { sigla: V.sigla || "", tit: `Colonna ${colId} ${sig[0].titolo}`, nota: sig.every(r => r.binario === "sxdx") ? "binario sinistro e destro uguali" : "", sx: lati.sx, dx: lati.dx };
+        colonna = { sigla: siglaT, tit: `Colonna ${colId} ${sig[0].titolo}`, nota: sig.every(r => r.binario === "sxdx") ? "binario sinistro e destro uguali" : "", sx: lati.sx, dx: lati.dx };
       const stSig = peggiore(...sig.map(r => r.st));
       let acc = null;
       for (const tipo of unici(locoSu((o.out || o.inn).lettera.charCodeAt(0) - 65))) {
@@ -589,7 +593,7 @@
       { t: "Condizioni (note Sez. 4.6)", x: g.condizioni || "Nessuna nota", st: g.st, src: db.src(g.fonte, g.pag) }
     ];
     const voce = { linea: lineaTxt, ind: indRow.cifra, fl: db.breve(ol.fonte), tratto: ol.tratto,
-      nota: `Colonna scelta con la sigla ${V.sigla === undefined ? "?" : V.sigla} (colonna ${colId})`, sigle };
+      nota: `Colonna scelta con la sigla ${siglaT || "?"} (colonna ${colId})`, sigle };
     if (colonna) voce.colonna = colonna;
     return voce;
   }

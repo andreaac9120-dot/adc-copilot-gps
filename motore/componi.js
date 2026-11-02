@@ -305,24 +305,43 @@
     if (loco.some(l => l.tratti)) R.push("LOCOMOTIVE per tratto: " + loco.map(l => `${l.etichetta} ${l.tratti ? l.tratti.map(k => String.fromCharCode(65 + k)).join("") || "nessuno" : "tutti"}`).join(", "));
     if (!completo) { R.push("  ! ITINERARIO PARZIALE: il pacchetto non copre tutto il viaggio"); for (const l of lacune) R.push(`    - ${l}`); }
 
-    // colonna delle Sigle
+    // colonna delle Sigle (regola confermata dall'utente il 02/11/2026): velocità e percentuale di massa frenata del treno
+    // UGUALI O PIÙ PICCOLE di quelle della colonna (stesso rango; colonne «G» solo per treni in regime G e viceversa);
+    // tra le colonne valide la più vicina (velocità più bassa, poi percentuale più bassa). Sigla e percentuale dalla
+    // pagina della Scheda di ogni tratto (es. pag. 1 DE18 G60%, pag. 2–4 E494 P55%).
+    const titoli = [], vistiT = new Set();
+    for (const r of T.sigle) { const k = JSON.stringify([r.colonna, r.titolo]); if (!vistiT.has(k)) { vistiT.add(k); titoli.push([r.colonna, r.titolo]); } }
+    const scegliColonna = (sigla, freno) => {
+      const m = /^M?(\d+)([ABCP])/.exec(sigla || ""), mf = /^\s*([A-Z]?)\s*(\d+)%/.exec(freno || "");
+      if (!m || !mf) return [null, null];
+      const v = +m[1], rango = m[2], g = mf[1] === "G", perc = +mf[2], valide = [];
+      for (const [col, tit] of titoli) {
+        const mt = /^\*?(\d+)([ABCP])\s+(G?)(\d+)%/.exec(tit);
+        if (mt && mt[2] === rango && (mt[3] === "G") === g && +mt[1] >= v && +mt[4] >= perc) valide.push([+mt[1], +mt[4], col, tit]);
+      }
+      if (!valide.length) return [null, null];
+      const cmp = (x, y) => (x[0] - y[0]) || (x[1] - y[1]) || (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0) || (x[3] < y[3] ? -1 : x[3] > y[3] ? 1 : 0);
+      const best = valide.reduce((a, b) => (cmp(b, a) < 0 ? b : a));
+      return [best[2], best[3]];
+    };
     let colonna = null;
-    if (S && S.intestazione.sigla) {
-      const m = /^M?(\d+)([ABCP])/.exec(S.intestazione.sigla);
-      const perc = parseInt(String(S.intestazione.freno || "0").replace(/\D/g, "") || "0", 10) || 0;
-      if (m) {
-        const v = +m[1], rango = m[2], migliori = [], visti = new Set();
-        for (const r of T.sigle) {
-          const k = JSON.stringify([r.colonna, r.titolo]); if (visti.has(k)) continue; visti.add(k);
-          const mt = /^\*?(\d+)([ABCP])\s+(\d+)%/.exec(r.titolo);
-          if (mt && +mt[1] === v && mt[2] === rango && +mt[3] <= perc) migliori.push([+mt[3], r.colonna, r.titolo]);
-        }
-        if (migliori.length) {
-          const cmp = (x, y) => (x[0] - y[0]) || (x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0) || (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0);
-          const best = migliori.reduce((a, b) => (cmp(b, a) > 0 ? b : a));
-          colonna = best[1];
-          R.push(`COLONNA SIGLE: ${colonna} (${best[2]}) per la sigla ${S.intestazione.sigla} ${S.intestazione.freno === undefined ? "None" : S.intestazione.freno}`);
-        } else R.push("COLONNA SIGLE: nessuna colonna adatta tra quelle nel database");
+    if (S) {
+      const pagH = new Map(S.pagine.map(h => [h.pdf_pag, h]));
+      estremi.forEach(([a_, b_], k) => {
+        const riga = sequenza[Math.min(a_ + 1, b_)].riga;   // prima riga dopo l'inizio: il tratto appartiene a quella pagina
+        const h = pagH.get(riga.pag) || S.intestazione;
+        const sg = h.sigla || S.intestazione.sigla, fr = h.freno || S.intestazione.freno;
+        const [col] = scegliColonna(sg, fr);
+        itinerario[k].sigla = `${sg || ""} ${fr || ""}`.trim();
+        itinerario[k].colonna_sigle = col || "";
+        if (col && !colonna) colonna = col;
+      });
+      const gruppi = new Map();
+      itinerario.forEach((t, k) => { const key = JSON.stringify([t.sigla, t.colonna_sigle]); if (!gruppi.has(key)) gruppi.set(key, []); gruppi.get(key).push(String.fromCharCode(65 + k)); });
+      for (const [key, lett] of gruppi) {
+        const [sg, col] = JSON.parse(key);
+        const tit = (titoli.find(([c]) => c === col) || [, ""])[1];
+        R.push(`COLONNA SIGLE tratti ${lett.join("")}: ` + (col ? `${col} (${tit}) per la sigla ${sg}` : `nessuna colonna adatta alla sigla ${sg} tra quelle nel database`));
       }
     }
 
