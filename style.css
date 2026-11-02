@@ -305,3 +305,9 @@ footer{line-height:1.65}
 .direction-signal small { display: block; color: var(--muted); margin-top: 4px; }
 .direction-legend { margin-bottom: 12px; }
 .affA-verde { background: #15803d; outline-color: #15803d; color: #ffffff; }
+
+.app-options { position: fixed; margin: 0; width: min(300px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid var(--rule-strong); border-radius: 14px; padding: 16px; color: var(--ink); background: var(--paper); box-shadow: 0 16px 48px #0006; }
+.app-options::backdrop { background: #04101d66; }
+.app-options .screen-heading h2 { font-size: 1.15rem; }
+.options-list { list-style: none; padding: 0; margin: 0; }
+.options-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 9px; background: var(--paper-alt); color: var(--ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }

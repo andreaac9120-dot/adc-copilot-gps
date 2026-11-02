@@ -16,10 +16,23 @@
   dialog.querySelector('[value="'+prefs.layout+'"]').checked=true;
   result.textContent='Per ruotare lo schermo, abilita anche la rotazione automatica nelle impostazioni del telefono o tablet.';
   let opener;
+  const menu=document.createElement('dialog');
+  menu.id='app-options';menu.className='app-options';menu.setAttribute('aria-labelledby','options-title');
+  menu.innerHTML='<div class="screen-heading"><h2 id="options-title">Menu</h2><button type="button" class="close" data-options-close aria-label="Chiudi menu">Chiudi</button></div><nav aria-label="Impostazioni"><ul class="options-list"><li><button type="button" class="options-item" data-options-screen><span>Schermo</span><span aria-hidden="true">›</span></button></li></ul></nav>';
+  document.body.append(menu);
   document.querySelectorAll('header.head .tools:not(#vLoco)').forEach(tools=>{
-    const button=document.createElement('button'); button.type='button';button.className='chip screen-more';button.textContent='⋮';button.setAttribute('aria-label','Menu schermo');button.setAttribute('aria-haspopup','dialog');
-    button.addEventListener('click',()=>{opener=button;dialog.showModal();});tools.append(button);
+    const button=document.createElement('button'); button.type='button';button.className='chip screen-more';button.textContent='⋮';button.setAttribute('aria-label','Apri menu');button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
+    button.addEventListener('click',()=>{
+      opener=button;menu.showModal();button.setAttribute('aria-expanded','true');
+      const r=button.getBoundingClientRect();
+      menu.style.left=Math.max(12,Math.min(r.right-menu.offsetWidth,innerWidth-menu.offsetWidth-12))+'px';
+      menu.style.top=Math.max(12,Math.min(r.bottom+8,innerHeight-menu.offsetHeight-12))+'px';
+    });tools.append(button);
   });
+  menu.querySelector('[data-options-close]').addEventListener('click',()=>menu.close());
+  menu.querySelector('[data-options-screen]').addEventListener('click',()=>{menu.close();dialog.showModal();});
+  menu.addEventListener('close',()=>{opener?.setAttribute('aria-expanded','false');if(!dialog.open)opener?.focus();});
+  menu.addEventListener('click',e=>{if(e.target===menu){const r=menu.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)menu.close();}});
   dialog.querySelector('[data-screen-close]').addEventListener('click',()=>dialog.close());
   dialog.addEventListener('close',()=>opener?.focus());
   dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
@@ -37,3 +50,4 @@
   else if(screen.orientation?.lock){screen.orientation.lock('portrait').catch(()=>{prefs.rotate=true;rotate.checked=true;save();});}
   else {prefs.rotate=true;rotate.checked=true;save();}
 })();
+

@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.35 — versione unica
+# ADC COPILOT 1.0.36 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -9,6 +9,8 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
 ## Generatore senza IA (prova, 1.0.17–1.0.23)
+
+1.0.36: il pulsante con tre pallini apre un menu a lista. La voce Schermo apre le impostazioni di visualizzazione esistenti. Conservati formato telefono/tablet, rotazione e preferenze salvate; nessuna modifica ai viaggi.
 
 1.0.35: rimosso dalla testata della schermata del viaggio il riepilogo dei riquadri M3. Le prescrizioni rimangono nelle rispettive progressive della scheda e nel pulsante Prescrizioni M3/M40. Conservati gli altri avvisi e tutti i dati salvati, anche nei viaggi precedenti.
 
