@@ -305,26 +305,29 @@
     if (loco.some(l => l.tratti)) R.push("LOCOMOTIVE per tratto: " + loco.map(l => `${l.etichetta} ${l.tratti ? l.tratti.map(k => String.fromCharCode(65 + k)).join("") || "nessuno" : "tutti"}`).join(", "));
     if (!completo) { R.push("  ! ITINERARIO PARZIALE: il pacchetto non copre tutto il viaggio"); for (const l of lacune) R.push(`    - ${l}`); }
 
-    // colonna delle Sigle (regola dell'utente, corretta il 02/11/2026): le Sigle Complementari devono essere PIÙ RESTRITTIVE
-    // della sigla della Scheda: velocità e percentuale della colonna UGUALI O PIÙ PICCOLE di quelle del treno (stesso rango;
-    // colonne «G» solo per treni in regime G e viceversa); tra le valide la più vicina al treno (velocità più alta, poi
-    // percentuale più alta). Sigla e percentuale dalla
-    // pagina della Scheda di ogni tratto (es. pag. 1 DE18 G60%, pag. 2–4 E494 P55%).
+    // colonna delle Sigle – PGOS-CTI All. IX art. 9 c.3 b) (pag. PDF 149), verificata dall'utente il 02/11/2026:
+    // fra le sigle ammesse per il mezzo di trazione, quella con percentuale di massa frenata, rango e velocità UGUALI O
+    // INFERIORI a quelli del treno, tenendo conto del tipo di frenatura: treno in regime G → solo colonne G; treno in
+    // regime P → colonne P o G. Rango: A < B < C < P. La norma non dà un ordine tra le colonne valide: si propone la meno
+    // restrittiva (velocità più alta, poi percentuale più alta). Sigla e percentuale dalla pagina della Scheda di ogni
+    // tratto. I divieti per grado di frenatura (11 non su IX, 12 non su VII–IX) li controlla il generatore.
     const titoli = [], vistiT = new Set();
     for (const r of T.sigle) { const k = JSON.stringify([r.colonna, r.titolo]); if (!vistiT.has(k)) { vistiT.add(k); titoli.push([r.colonna, r.titolo]); } }
+    const RANGO = { A: 1, B: 2, C: 3, P: 4 };
     const scegliColonna = (sigla, freno) => {
       const m = /^M?(\d+)([ABCP])/.exec(sigla || ""), mf = /^\s*([A-Z]?)\s*(\d+)%/.exec(freno || "");
       if (!m || !mf) return [null, null];
-      const v = +m[1], rango = m[2], g = mf[1] === "G", perc = +mf[2], valide = [];
+      const v = +m[1], rango = RANGO[m[2]], g = mf[1] === "G", perc = +mf[2], valide = [];
       for (const [col, tit] of titoli) {
         const mt = /^\*?(\d+)([ABCP])\s+(G?)(\d+)%/.exec(tit);
-        if (mt && mt[2] === rango && (mt[3] === "G") === g && +mt[1] <= v && +mt[4] <= perc) valide.push([+mt[1], +mt[4], col, tit]);
+        if (!mt) continue;
+        if (g && mt[3] !== "G") continue;              // regime G: solo sigle G
+        if (+mt[1] <= v && RANGO[mt[2]] <= rango && +mt[4] <= perc) valide.push([+mt[1], +mt[4], RANGO[mt[2]], -parseInt(col, 10), col, tit]);
       }
       if (!valide.length) return [null, null];
-      // la più vicina al treno: velocità più alta, poi percentuale più alta (a parità, la colonna con numero più basso)
-      const cmp = (x, y) => (x[0] - y[0]) || (x[1] - y[1]) || (x[2] < y[2] ? 1 : x[2] > y[2] ? -1 : 0);
+      const cmp = (x, y) => (x[0] - y[0]) || (x[1] - y[1]) || (x[2] - y[2]) || (x[3] - y[3]);
       const best = valide.reduce((a, b) => (cmp(b, a) > 0 ? b : a));
-      return [best[2], best[3]];
+      return [best[4], best[5]];
     };
     let colonna = null;
     if (S) {

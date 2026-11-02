@@ -582,6 +582,20 @@
       aperti.push({ cosa: `Sigle Complementari ${ol.nome_breve} da ${o.nome}`, loc: o.id, motivo: "da_studiare",
         richiesta: `STUDIA SOLO Sigle Complementari ${ol.nome_breve} – ${o.nome} (km ${o.km}), ${TRENO}` });
     }
+    // PGOS-CTI All. IX art. 9 c.3: sigla 11 mai sui tratti con grado di frenatura IX; sigla 12 mai su VII, VIII, IX
+    const vietati = { "11": ["IX"], "12": ["VII", "VIII", "IX"] }[colId];
+    if (vietati && sig.length) {
+      const righeG = T.fiancata.filter(r => r.linea_id === ol.linea_id && r.senso === (sensoO || "") && (r.tipo === "grado" || /rado/i.test(r.testo || "")));
+      const trov = new Set();
+      for (const r of righeG) for (const mm of (r.testo || "").matchAll(/[Gg]rado(?: di frenatura)?\s+(VIII|VII|IX)\b/g)) if (vietati.includes(mm[1])) trov.add(mm[1]);
+      const trovati = [...trov].sort();
+      const regola = `Sigla ${colId} non utilizzabile con grado di frenatura ${vietati.join(", ")} (PGOS-CTI All. IX art. 9/3)`;
+      if (trovati.length)
+        controlli.push([`${regola}: sull'affiancata ci sono tratti con grado ${trovati.join(", ")}`, "no", "V", db.src(righeG[0].fonte, righeG[0].pag)]);
+      else
+        controlli.push([`${regola}: nessun grado ${vietati.join(", ")} sull'affiancata nel database (controllare sulla fiancata)`, "ok", "R",
+          [...new Set(righeG.slice(0, 3).map(r => db.src(r.fonte, r.pag)))].join("; ") || "database dati di linea"]);
+    }
     const esito = controlli.some(c => c[1] === "no") ? "NON PERCORRIBILE" : controlli.some(c => c[1] === "manca") ? "DA VERIFICARE" : "PERCORRIBILE";
     const stPerc = peggiore(...controlli.map(c => c[2]));
     const ilTuo = trenoInd || "?";
