@@ -1,8 +1,8 @@
-// ---------- Generatore senza IA (prova, 1.0.17) ----------
+// ---------- Generatore senza IA (dalla 1.0.17; dalla 1.0.38 unico modo di creare un viaggio nell'app) ----------
 // Crea il pacchetto .adc.json nel telefono, senza Claude e senza rete, dal database dati di linea importato
 // (file .adcdb.json del repository privato adc-copilot-db). I lettori e il generatore in motore/ sono la
 // traduzione fedele dei programmi Python del database: stessi dati in ingresso, stesso pacchetto in uscita.
-// Non sostituisce lo studio con Claude (tasti Studio linea condotta/formazione), che resta invariato.
+// Dalla 1.0.38 i tasti Studio linea condotta/formazione con Claude sono tolti: lo studio con IA si chiede in chat.
 const GEN = { ultimo: null, rapporto: [], occupato: false };
 // F07: import manuali (database, pagine FL) e «Aggiorna dati» non si sovrappongono
 function syncInCorso() { if (SYNC.occupato) { toast("Aggiornamento dati in corso: riprova tra poco"); return true; } return false; }
@@ -176,7 +176,7 @@ async function genGenera(btn) {
       fact("Percorso", esc(I.percorso), "", null),
       fact("Tratti", seg.split("<br>").map(esc).join("<br>"), "", null),
       fact("Da studiare", ap.length ? esc(ap.map(a => a.cosa).join(" · ")) : "nessun punto aperto", "", ap.length ? "N" : "V"),
-      `<div class="note">È una prova: confrontalo con il pacchetto di Claude. Si salva nel riquadro «Viaggi senza IA salvati», separato da quelli di Claude.</div>`,
+      `<div class="note">Si salva nel riquadro «Viaggi senza IA salvati», separato dai viaggi studiati da Claude in chat.</div>`,
       `<div class="btns left"><button class="studia" type="button" data-gen="anteprima">Anteprima</button><button class="studia" type="button" data-gen="salva">Salva nei viaggi senza IA</button><button class="studia alt" type="button" data-gen="scarica">Scarica .adc.json</button></div>`
     ], c.rapporto);
   } catch (err) {

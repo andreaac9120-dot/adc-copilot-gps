@@ -8,6 +8,11 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.38 (02/11/2026) – tolti i comandi di studio con IA
+
+Dalla PWA sono stati tolti i tasti **Studio linea condotta** e **Studio linea formazione** (riquadro «Nuovo studio»), il riquadro «Da Claude: da studiare e mancanti», i tasti **Studia** nella scheda e il riquadro «Allega documenti del treno»: l'app non invia più comandi a Claude. Il generatore senza IA è in cima alla Home («Nuovo viaggio senza IA»). Per studiare una linea con l'IA si scrive in chat a Claude (progetto ADC COPILOT, STUDIO LINEA CONDOTTA con la Scheda Treno allegata); il pacchetto .adc.json e il blocco formazione che ne risultano si importano ancora con **Importa pacchetto** nel riquadro «Viaggi da Claude (chat)». I punti aperti restano elencati nella scheda, senza tasto di invio.
+
 ## Generatore senza IA (prova, 1.0.17–1.0.23)
 
 1.0.37: orientamento Automatico, Verticale e Orizzontale con pulsante Applica orientamento. Richiede lo schermo intero prima del comando di orientamento a Chrome; salva la scelta solo dopo accettazione. Gestisce rifiuti e uscita da schermo intero, senza ripristinare automaticamente una spunta fuorviante. Nessun blocco automatico all’avvio. Prove di gestione con API simulate; rotazione fisica da verificare sui dispositivi.

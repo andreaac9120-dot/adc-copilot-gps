@@ -1,5 +1,6 @@
-// ADC COPILOT – app: archivio viaggi, import dei pacchetti, invio dei comandi a Claude.
-const VERSION = "1.0.37";
+// ADC COPILOT – app: archivio viaggi e import dei pacchetti. Dalla 1.0.38 nessun invio di comandi a Claude:
+// lo studio con IA si chiede in chat (progetto ADC COPILOT); qui resta il generatore senza IA.
+const VERSION = "1.0.38";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -473,7 +474,6 @@ async function home() {
   let V = [];
   try { V = await DB.listViaggi(); } catch (err) { toast("Archivio non leggibile: " + testoErrore(err)); }
   V.sort((a, b) => dataId(b).localeCompare(dataId(a)) || String(a && a.id).localeCompare(String(b && b.id)));
-  const buoni = V.filter(valido);
   $("#viaggi").innerHTML = V.length ? V.map(p => {
     const id = String(p && p.id || "");
     if (!valido(p)) return `<div class="trip"><div class="item row-st bad"><span><b>Viaggio non leggibile</b><br><small>${esc(id || "senza id")} · danneggiato o salvato con regole vecchie: esportalo per Claude o eliminalo</small></span><button class="studia alt" type="button" data-exp="${esc(id)}">Esporta</button></div>
@@ -481,10 +481,7 @@ async function home() {
     const I = p.intestazione;
     return `<div class="trip"><button class="item" type="button" data-open="${esc(id)}"><span><span class="tno">${esc(I.treno)}</span><br>${esc(I.percorso)}<br><small>${esc(I.data_viaggio)} · rev. ${esc(p.revisione)} · ${esc(p.comandi.map(c => c.replace("STUDIO LINEA ", "")).join(" + ").toLowerCase())}${p.aperti && p.aperti.length ? ` · ${p.aperti.length} da studiare` : ""}</small></span><small>apri ›</small></button>
       <button class="del" type="button" data-del="${esc(id)}" aria-label="Elimina ${esc(I.treno)}">Elimina</button></div>`;
-  }).join("") : `<div class="empty">Nessun viaggio salvato. Quando Claude ti consegna il file <b>.adc.json</b> alla fine dello studio, scaricalo e toccalo con <b>Importa pacchetto</b>, oppure condividilo con questa app.</div>`;
-  const M = buoni.flatMap(p => (p.aperti || []).map(a => ({ ...a, treno: p.intestazione.treno, vid: p.id })));
-  $("#messaggi").innerHTML = M.length ? M.map(a => `<div class="item row-st"><span><b>${esc(a.treno)}</b> · ${esc(a.cosa)}<br><small>${esc(LAB_MOTIVO[a.motivo] || "da studiare")}</small></span><span class="btns">${a.motivo === "attesa_massa_treno" ? `<button class="studia alt" type="button" data-docfor="${esc(a.vid)}">Allega doc.</button>` : ""}<button class="studia" type="button" data-req="${esc(a.richiesta)}" data-proj="${projDi(a)}">Studia</button></span></div>`).join("")
-    : `<div class="note">Nessun punto aperto nei viaggi salvati. I messaggi completi di Claude restano nella chat del progetto.</div>`;
+  }).join("") : `<div class="empty">Nessun viaggio di Claude salvato. Se chiedi uno studio in chat, alla fine Claude ti consegna il file <b>.adc.json</b>: scaricalo e toccalo con <b>Importa pacchetto</b>, oppure condividilo con questa app.</div>`;
   if (typeof genLista === "function") genLista();
   try { const e = await navigator.storage.estimate(); $("#storeInfo").textContent = `Spazio usato nel telefono: ${(e.usage / 1048576).toFixed(1)} MB.`; } catch (_) {}
   await sospesi();
@@ -529,81 +526,7 @@ async function esporta(id) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
-// ---------- Invio a Claude ----------
-// Pacchetto unico dal 22/10/2026: le regole complete (GEO, righe M3 compatte, controllo) sono nella scheda 16c del progetto.
-const CHIUSURA = 'Al termine consegnami il pacchetto unico .adc.json secondo la scheda 16c (GEO dal registro GPS_17, righe M3 compatte, controllo con GPS_16e).';
-// Dal 25/10/2026 lo studio di formazione si fa nel progetto ADC FORMAZIONE, partendo dall'ultimo pacchetto del viaggio.
-// Dalla 1.0.12 la PWA importa direttamente il file blocco_formazione e lo unisce al viaggio salvato.
-const CHIUSURA_F = "Al termine consegnami il file blocco_formazione_<treno>_<data>.json (scheda F16) con l'id del viaggio del pacchetto di condotta, se lo conosci: lo importo nella PWA. Se ti ho allegato il pacchetto .adc.json, va bene anche il pacchetto aggiornato.";
-const PROGETTO = { condotta: "ADC COPILOT", formazione: "ADC FORMAZIONE" };
 async function copia(txt) { try { await navigator.clipboard.writeText(txt); return true; } catch (_) { return false; } }
-async function inviaClaude(testo, files = [], proj = "condotta") {
-  const copiato = await copia(testo);
-  const dati = { title: "ADC COPILOT", text: testo };
-  if (files.length) dati.files = files;
-  if (navigator.share && (!navigator.canShare || navigator.canShare(dati))) {
-    try { await navigator.share(dati); toast(`Scegli Claude, progetto ${PROGETTO[proj] || PROGETTO.condotta}.${copiato ? " Il comando è anche copiato: se non compare, incollalo" : ""}`); return; }
-    catch (e) { if (e.name === "AbortError") return; }
-  }
-  openSheet(shHead("Invia a Claude", copiato ? "Comando copiato negli appunti" : "Copia il testo") +
-    `<div class="reqbox">${esc(testo)}</div>` +
-    (files.length ? `<div class="note">Allega in chat anche: ${files.map(f => esc(f.name)).join(", ")}.</div>` : "") +
-    `<div class="note">Apri l'app Claude, entra nel progetto <b>${PROGETTO[proj] || PROGETTO.condotta}</b> e incolla.${proj === "formazione" ? " Il file blocco_formazione che riceverai si importa qui con Importa pacchetto." : ""}</div>`);
-}
-function inputs() {
-  return { scheda: [...$("#fScheda").files], traccia: $("#tTraccia").value.trim(), massa: $("#nMassa").value.trim(), doc: [...$("#fDocNuovo").files] };
-}
-// Documenti del treno (M18, BFC, M40 Tecnico…) per massa, freni a mano e staffe.
-// C09 – un'unica regola sull'origine della massa: se l'hai scritta tu vale quella e i documenti sono solo il riscontro.
-const DOC_DATI = "ricava massa rimorchiata, massa frenata a mano (freni a vite), % di carri carichi e massa assiale minima dei vuoti, poi fai il calcolo delle staffe (PE CTI 16/2017) e i controlli PGOS.";
-const DOC_FINE = " Mai la Prestazione della Scheda Treno. I documenti valgono solo per questo viaggio.";
-const DOC_USO = `${DOC_DATI} La massa del treno va presa da questi documenti: nel pacchetto metti pgos.massa_origine "documenti", in massa_fonte il documento e la riga usati e in massa_st lo stato della lettura (V o I).${DOC_FINE}`;
-const DOC_RISCONTRO = `${DOC_DATI} La massa del treno resta quella che ti ho scritto (pgos.massa_origine "utente", massa_st V): la massa letta nei documenti mettila solo in pgos.massa_riscontro con fonte, stato ed esito concorde/discorde. Se è discorde aggiungi un punto aperto "discrepanza_massa" con le due masse e tieni lo stato dei controlli al massimo I; non sostituire la massa.${DOC_FINE}`;
-function richiestaDoc(treno, files) {
-  return `STUDIA SOLO staffe di immobilizzazione e controlli PGOS – ${treno}\nTi allego i documenti del treno (${files.map(f => f.name).join(", ")}): ${DOC_USO}\n${CHIUSURA_F}`;
-}
-const docScelti = new WeakMap(); // riquadro .docbox → File[]
-function docScegli(inp) {
-  const box = inp.closest(".docbox"), files = [...inp.files];
-  docScelti.set(box, files);
-  const list = box.querySelector(".doclist"), send = box.querySelector("[data-docsend]");
-  list.hidden = send.hidden = !files.length;
-  list.textContent = files.length ? `Scelti: ${files.map(f => f.name).join(", ")}` : "";
-}
-function docInvia(t) {
-  const box = t.closest(".docbox"), files = docScelti.get(box) || [];
-  if (!files.length) return toast("Scegli prima i documenti del treno");
-  inviaClaude(richiestaDoc(box.querySelector(".fDoc").dataset.treno, files), files, "formazione");
-}
-async function docPer(id) {
-  const p = await DB.getViaggio(id);
-  if (!p) return toast("Viaggio non trovato");
-  openSheet(shHead("Documenti del treno", `${p.intestazione.treno} · ${p.intestazione.data_viaggio}`) + Scheda.docBox(p.condotta.TRENO || `treno ${p.intestazione.treno} del ${p.intestazione.data_viaggio}`));
-}
-function comando(tipo) {
-  const x = inputs();
-  if (tipo === "condotta") {
-    if (x.scheda.length) return inviaClaude(`STUDIO LINEA CONDOTTA\nScheda Treno allegata.\n${CHIUSURA}`, x.scheda);
-    if (x.traccia) return inviaClaude(`STUDIO LINEA CONDOTTA con la traccia (la Scheda Treno arriverà dopo).\n\nTRACCIA:\n${x.traccia}\n\n${CHIUSURA}`);
-    $("#dTraccia").open = true; $("#tTraccia").focus();
-    return toast("Scegli la Scheda Treno o incolla la traccia");
-  }
-  if (tipo === "formazione") {
-    if (!x.scheda.length && !x.traccia) return toast("Serve la Scheda Treno o la traccia");
-    const mt = Number(x.massa);
-    if (x.massa && !(Number.isFinite(mt) && mt > 0 && mt < 10000)) { $("#nMassa").focus(); return toast("Massa del treno non valida: scrivi le tonnellate, es. 1450"); }
-    const massa = x.massa ? `\nMassa del treno: ${mt} t (fornita da me: pgos.massa_origine "utente", massa_fonte "fornita dall'utente", massa_st V).` : x.doc.length ? "\nMassa del treno: ricavala dai documenti del treno allegati (mai dalla Prestazione della Scheda Treno)." : "\nMassa del treno non fornita: i controlli PGOS restano non eseguibili.";
-    const doc = x.doc.length ? `\nDocumenti del treno allegati (${x.doc.map(f => f.name).join(", ")}): ${x.massa ? DOC_RISCONTRO : DOC_USO}` : "";
-    const base = x.scheda.length ? "STUDIO LINEA FORMAZIONE\nScheda Treno allegata." : `STUDIO LINEA FORMAZIONE con la traccia.\n\nTRACCIA:\n${x.traccia}\n`;
-    return inviaClaude(`${base}${massa}${doc}\n${CHIUSURA_F}`, [...x.scheda, ...x.doc], "formazione");
-  }
-}
-function studia(req, proj) {
-  const f = proj === "formazione";
-  inviaClaude(`${req}\n${f ? CHIUSURA_F : "Al termine ripubblica il pacchetto viaggio .adc.json con la revisione aggiornata."}`, [], f ? "formazione" : "condotta");
-}
-// I punti aperti dello studio di formazione hanno il prefisso "[FORMAZIONE]" (scheda F16): vanno al progetto ADC FORMAZIONE.
-const projDi = a => (isObj(a) && isStr(a.cosa) && a.cosa.startsWith("[FORMAZIONE]")) || a.motivo === "attesa_massa_treno" || a.motivo === "discrepanza_massa" ? "formazione" : "condotta";
 
 // ---------- Eventi ----------
 document.addEventListener("click", e => {
@@ -612,12 +535,8 @@ document.addEventListener("click", e => {
   if (d.gps && typeof GPS !== "undefined") return GPS.handle(d.gps);
   if (d.cmd === "theme") return toggleTheme();
   if (d.cmd === "home") return history.length > 1 && location.hash ? history.back() : home();
-  if (d.cmd) return comando(d.cmd);
   if (d.open) return apri(d.open);
   if (d.del) return elimina(d.del);
-  if (d.req) return studia(d.req, d.proj);
-  if (d.docsend) return docInvia(t);
-  if (d.docfor) return docPer(d.docfor);
   if (d.exp) return esporta(d.exp);
   if (d.cond === "riprova") return importaCondivisi();
   if (d.cond === "scarta") return scartaCondivisi();
@@ -630,7 +549,6 @@ $("#scrim").addEventListener("click", closeSheet);
 $("#popScrim").addEventListener("click", () => Scheda.popClose());
 document.addEventListener("keydown", e => { if (e.key === "Escape") { if (Scheda.popOpenVisible()) return Scheda.popClose(); closeSheet(); } });
 $("#fImport").addEventListener("change", e => { importaFiles([...e.target.files]); e.target.value = ""; });
-document.addEventListener("change", e => { if (e.target.classList && e.target.classList.contains("fDoc")) docScegli(e.target); });
 // Mantieni la scelta dell'utente; al rientro riacquisisci un fix fresco.
 document.addEventListener("visibilitychange", () => {
   if (typeof GPS !== "undefined") GPS.visibilityChanged();

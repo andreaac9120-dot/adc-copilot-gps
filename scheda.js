@@ -115,8 +115,8 @@ const Scheda = (() => {
   function phone(who, num, src, st) {
     return `<div class="phone"><div class="who"><span class="dot d-${ST(st)}"></span>${esc(who)}<div class="note">${esc(src)}</div>${num ? `<div class="num">${esc(num)}</div>` : ""}</div>${num ? `<button class="copy" type="button" data-copy="${esc(num)}">Copia</button>` : ""}</div>`;
   }
-  function studiaBtn(cosa, i) { const r = R[i]; const req = `STUDIA SOLO ${cosa} – ${r.n} (km ${r.km}), ${TRENO}`; return `<button class="studia" type="button" data-req="${esc(req)}">Studia</button>`; }
-  function stItem(label, cosa, i) { return `<div class="item row-st"><span>${esc(label)}<br><small>da studiare</small></span>${studiaBtn(cosa, i)}</div>`; }
+  // 1.0.38: niente tasto Studia (lo studio con IA si chiede in chat); resta solo l'indicazione "da studiare".
+  function stItem(label) { return `<div class="item row-st"><span>${esc(label)}<br><small>da studiare</small></span></div>`; }
   const pagFL = (id, kind) => FLLOC[id] && FLLOC[id][kind] && FLPAG[FLLOC[id][kind]];
 
   function locMenu(i) {
@@ -297,31 +297,16 @@ const Scheda = (() => {
       fact("Grado di frenatura più gravoso", dcell(S.grado_gravoso), S.grado_gravoso.src, S.grado_gravoso.st) +
       (S.tab36_min ? fact("Tab. 36 – % minima", dcell(S.tab36_min), S.tab36_min.src, S.tab36_min.st) : "") +
       fact(`Esito · ${ESITO_TXT[S.esito]}`, esc(S.x || ""), S.src, S.st) : "";
-    // Dati mancanti per staffe o PGOS: si possono mandare i documenti del treno.
-    const manca = pg.massa_t == null || (S && S.esito === "non_eseguibile") || pg.controlli.some(c => c.esito === "non_eseguibile");
     openSheet(shHead("Studio linea formazione", P.intestazione.percorso) +
       `<h3 class="grp">Per tratto</h3><div class="stbl-wrap"><table class="stbl"><thead><tr><th>Tratto</th><th>Codifica</th><th>D4</th><th>Fren.</th><th>GDP</th></tr></thead><tbody>${tr}</tbody></table></div>` +
       `<h3 class="grp">Prestazione massima</h3>${pm || `<div class="note">Non studiata.</div>`}` + pgos + staffe +
-      (manca ? docBox(TRENO) : `<details class="docmore"><summary>Allega altri documenti del treno</summary>${docBox(TRENO)}</details>`) +
       `<h3 class="grp">Fonti per tratto</h3>${srcs.map(s => `<div class="note">${esc(s)}</div>`).join("")}`);
   }
   function aperti() {
     const A = P.aperti || [];
     const lab = { da_studiare: "da studiare", attesa_scheda_treno: "in attesa della Scheda Treno", attesa_massa_treno: "serve la massa del treno", fl_mancante: "FL mancante", illeggibile: "documento illeggibile", discrepanza_massa: "masse diverse tra te e i documenti" };
-    // punti di formazione → progetto ADC FORMAZIONE (prefisso "[FORMAZIONE]", massa)
-    const proj = a => String(a.cosa || "").startsWith("[FORMAZIONE]") || a.motivo === "attesa_massa_treno" || a.motivo === "discrepanza_massa" ? "formazione" : "condotta";
-    const serveDoc = A.some(a => a.motivo === "attesa_massa_treno");
-    openSheet(shHead("Da studiare", `${A.length} punti aperti`) + `<div class="menu">${A.map(a => `<div class="item row-st"><span>${esc(a.cosa)}<br><small>${esc(lab[a.motivo] || "da studiare")}</small></span><button class="studia" type="button" data-req="${esc(a.richiesta)}" data-proj="${proj(a)}">Studia</button></div>`).join("")}</div>
-      ${serveDoc ? docBox(TRENO) : ""}
-      <div class="note">Studia invia la richiesta a Claude. Poi importa il pacchetto aggiornato: sostituisce questa revisione.</div>`);
-  }
-  // Riquadro "Allega documenti del treno": M18, BFC ecc. per massa, freni a mano e staffe.
-  function docBox(treno) {
-    return `<div class="docbox"><div class="docbox-t"><b>Allega documenti del treno</b>
-      <small>M18, BFC, M40 Tecnico, lista carri: PDF o foto. Claude ne ricava massa rimorchiata, massa frenata a mano, % di carri carichi e massa assiale minima dei vuoti, poi fa il calcolo delle staffe e i controlli PGOS.</small></div>
-      <label class="btn file-btn">Scegli documenti<input type="file" class="fDoc" accept="application/pdf,.pdf,image/*" multiple hidden data-treno="${esc(treno)}"></label>
-      <div class="doclist note" hidden></div>
-      <button class="btn primary" type="button" data-docsend="1" hidden>Invia a Claude<small>Studio delle staffe con i documenti scelti</small></button></div>`;
+    openSheet(shHead("Da studiare", `${A.length} punti aperti`) + `<div class="menu">${A.map(a => `<div class="item row-st"><span>${esc(a.cosa)}<br><small>${esc(lab[a.motivo] || "da studiare")}</small></span></div>`).join("")}</div>
+      <div class="note">Per studiarli con l'IA chiedilo in chat a Claude, nel progetto ADC COPILOT. Poi importa il pacchetto aggiornato: sostituisce questa revisione.</div>`);
   }
   // Fumetto con la pagina del FL
   const POP = { d: null, k: 0, z: 1 };
@@ -381,6 +366,6 @@ const Scheda = (() => {
     if (d.act === "aff") return affiancate(+d.i, true), true;
     return false;
   }
-  return { show, click, popClose, docBox, marcaRiga, popOpenVisible: () => !$("#pop").hidden };
+  return { show, click, popClose, marcaRiga, popOpenVisible: () => !$("#pop").hidden };
 })();
 

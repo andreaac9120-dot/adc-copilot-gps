@@ -31,45 +31,12 @@
 
     <div id="agg" hidden></div>
 
-    <section class="card" aria-labelledby="hViaggi">
-      <div class="card-head"><h2 id="hViaggi">Viaggi salvati</h2>
-        <label class="btn primary file-btn">Importa pacchetto<input type="file" id="fImport" accept=".json,.adc.json,application/json" multiple hidden></label>
-      </div>
-      <div id="sospesi" hidden></div>
-      <div id="viaggi" class="menu"></div>
-      <p class="note" id="storeInfo"></p>
-    </section>
-
-    <section class="card" aria-labelledby="hMsg">
-      <div class="card-head"><h2 id="hMsg">Da Claude: da studiare e mancanti</h2></div>
-      <div id="messaggi" class="menu"></div>
-    </section>
-
-    <section class="card" aria-labelledby="hNuovo">
-      <div class="card-head"><h2 id="hNuovo">Nuovo studio</h2></div>
-      <p class="note">Lo studio lo fa Claude (serve la rete): la condotta nel progetto ADC COPILOT, la formazione nel progetto ADC FORMAZIONE. Il file blocco_formazione che ti dà ADC FORMAZIONE si importa qui come un pacchetto: si aggiunge al viaggio già salvato. Qui prepari il comando con i file: il tasto lo invia all'app Claude tramite Condividi. Al termine Claude ti dà il pacchetto <b>.adc.json</b> da importare qui sopra.</p>
-
-      <label class="field"><span>Scheda Treno (PDF Railmobile)</span>
-        <input type="file" id="fScheda" accept="application/pdf,.pdf,.json" multiple></label>
-      <details class="field" id="dTraccia"><summary>Oppure incolla la traccia (Softrail Info treno)</summary>
-        <textarea id="tTraccia" rows="6" placeholder="Incolla qui la notifica con le tratte tra località…"></textarea></details>
-      <label class="field"><span>Massa del treno in t (solo per Formazione, facoltativa)</span>
-        <input type="number" id="nMassa" inputmode="numeric" min="0" step="1" placeholder="es. 1450"></label>
-      <label class="field"><span>Documenti del treno per le staffe (M18, BFC, M40 Tecnico: PDF o foto, facoltativi)</span>
-        <input type="file" id="fDocNuovo" accept="application/pdf,.pdf,image/*" multiple></label>
-
-      <div class="actions">
-        <button class="btn primary" type="button" data-cmd="condotta">Studio linea condotta<small>Con la Scheda Treno o la traccia</small></button>
-        <button class="btn" type="button" data-cmd="formazione">Studio linea formazione<small>Progetto ADC FORMAZIONE · Scheda Treno o traccia, più massa o documenti del treno se li hai</small></button>
-      </div>
-    </section>
-
-    <!-- Generatore senza IA (prova, 1.0.17): non cambia lo studio con Claude qui sopra -->
+    <!-- Generatore senza IA: dalla 1.0.38 è l'unico modo di creare un viaggio nell'app (lo studio con IA si chiede in chat) -->
     <section class="card" aria-labelledby="hGen">
-      <div class="card-head"><h2 id="hGen">Generatore senza IA (prova)</h2>
+      <div class="card-head"><h2 id="hGen">Nuovo viaggio senza IA</h2>
         <label class="btn file-btn">Importa database<input type="file" id="fDb" accept=".json,.adcdb.json,application/json" hidden></label>
       </div>
-      <p class="note">Crea il pacchetto direttamente nel telefono, senza Claude e senza rete, con i dati di linea del database. Funziona solo sulle linee già caricate nel database. È una prova da confrontare con il pacchetto di Claude: lo studio delle linee si fa sempre con i tasti qui sopra.</p>
+      <p class="note">Crea il pacchetto direttamente nel telefono, senza Claude e senza rete, con i dati di linea del database. Funziona solo sulle linee già caricate nel database. Per studiare una linea con l'IA chiedilo in chat a Claude (progetto ADC COPILOT, comando STUDIO LINEA CONDOTTA con la Scheda Treno).</p>
       <div class="actions sync-row">
         <button class="btn" type="button" id="bSync" data-gen="sync">Aggiorna dati<small id="syncInfo"></small></button>
         <button class="btn file-btn" type="button" data-gen="token">Collegamento</button>
@@ -91,6 +58,15 @@
       </div>
       <h3 class="sub-h">Viaggi senza IA salvati</h3>
       <div id="viaggiSI" class="menu"></div>
+    </section>
+
+    <section class="card" aria-labelledby="hViaggi">
+      <div class="card-head"><h2 id="hViaggi">Viaggi da Claude (chat)</h2>
+        <label class="btn primary file-btn">Importa pacchetto<input type="file" id="fImport" accept=".json,.adc.json,application/json" multiple hidden></label>
+      </div>
+      <div id="sospesi" hidden></div>
+      <div id="viaggi" class="menu"></div>
+      <p class="note" id="storeInfo"></p>
     </section>
 
     <p class="note">Versione app <span id="ver"></span> · pacchetto unico v1 (scheda 16c). I viaggi restano solo in questo telefono. <span id="offInfo"></span></p>
