@@ -30,7 +30,10 @@ const Scheda = (() => {
       (pkg.formazione ? `<button class="chip" type="button" data-form="1">Formazione ▾</button>` : "") +
       (ap.length ? `<button class="chip warnchip" type="button" data-aperti="1">Da studiare: ${ap.length} ▾</button>` : "") +
       `<span class="chip">rev. ${pkg.revisione}</span>`;
-    $("#vAvvisi").innerHTML = (I.avvisi || []).map(a => `<div class="alert">${bold(a)}</div>`).join("") +
+    // I riepiloghi M3 sono già nelle progressive e nel pulsante Prescrizioni.
+    // Filtra solo le schede riepilogative, conservando gli altri avvisi e i dati originali.
+    const riepilogoM3 = a => /^\s*(?:\*\*)?M3\s+\d+(?:[.,]\d+)?\s*km\/h(?:\*\*)?\s*[–—-]/i.test(String(a));
+    $("#vAvvisi").innerHTML = (I.avvisi || []).filter(a => !riepilogoM3(a)).map(a => `<div class="alert">${bold(a)}</div>`).join("") +
       (pkg.avvisi_import || []).map(a => `<div class="alert"><b>Attenzione:</b> ${esc(a)}</div>`).join("") +
       (pkg.input && pkg.input.fase === "fase1_traccia" ? `<div class="alert">Studio con la sola traccia (fase 1): sigle complementari, Rs/NoRS e confronto con le velocità della Scheda restano in attesa della Scheda Treno.</div>` : "");
     $("#vNota").textContent = I.nota || "Tocca il nome di una località per fiancata, utenze, indicatori e pagine del FL. Strumento di consultazione: fa fede la Scheda Treno ufficiale con le prescrizioni ricevute.";

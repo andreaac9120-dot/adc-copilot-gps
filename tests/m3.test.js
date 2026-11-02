@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-function schedaCon(righe, moduli = []) {
+function schedaCon(righe, moduli = [], avvisi = []) {
   const elements = new Map();
   const document = { querySelector: selector => {
     if (!elements.has(selector)) elements.set(selector, { innerHTML: "", textContent: "", hidden: true });
@@ -14,7 +14,7 @@ function schedaCon(righe, moduli = []) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "scheda.js"), "utf8"), context);
   const Scheda = vm.runInContext("Scheda", context);
   Scheda.show({
-    revisione: 1, fonti: [], intestazione: { treno: "1", percorso: "A–B", loco: [] },
+    revisione: 1, fonti: [], intestazione: { treno: "1", percorso: "A–B", loco: [], avvisi },
     condotta: { R: righe, SEG: {}, FIANC: {}, DM: {}, DCO: {}, AFF: {}, IND: {},
       AFFLOC: {}, PLPROT: {}, FLPAG: {}, FLLOC: {}, LOCO: [], TRENO: "1",
       PRESC: { moduli, dentro: [], fuori: [], riep: { n: "1", tratto: "A–B", consegnati: "1" }, src: "M3" } }
@@ -73,4 +73,18 @@ test("M3 di Claude conserva il cippo spostabile e mostra modulo e note nel detta
   assert.match(html, /Binario destro/);
   assert.match(html, /id="m3-note-0" hidden><p class="m3-modulo">M3 n\. 2345436 riga 3<\/p>/);
   assert.doesNotMatch(html.split('class="m3-notes"')[0], /M3 n\. 2345436 riga 3/);
+});
+
+
+test("i riepiloghi M3 non ingombrano la testata, gli avvisi e le righe restano", () => {
+  const avvisi = ["**M3 40 km/h** – Sannazzaro, cippo 22, 50 m (tua linea)", "M3 80 km/h – Rogoredo, cippo 1, 100 m (affiancata)", "M3: progressiva non verificata", "ITINERARIO PARZIALE"];
+  const prima = [...avvisi];
+  const { elements } = schedaCon([{ t: "m3", n: "Rallentamento", km: "22", m3: { velocita: "40", inizio_km: "22", lunghezza_m: "50", binario: "S", note: [] } }], [], avvisi);
+  const h = elements.get("#vAvvisi").innerHTML;
+  assert.doesNotMatch(h, /cippo|Sannazzaro|affiancata/);
+  assert.match(h, /M3: progressiva non verificata/);
+  assert.match(h, /ITINERARIO PARZIALE/);
+  assert.match(elements.get("#vMeta").innerHTML, /data-presc="1"/);
+  assert.match(elements.get("#rows").innerHTML, /40<small> km\/h/);
+  assert.deepEqual(avvisi, prima);
 });
