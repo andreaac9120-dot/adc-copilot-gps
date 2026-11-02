@@ -1,20 +1,22 @@
 /* Preferenze di visualizzazione; nessun cambiamento ai dati del viaggio. */
 (() => {
   const root = document.documentElement;
-  let prefs = { layout: 'phone', rotate: true };
-  try { const saved = JSON.parse(localStorage.getItem('adc-screen') || '{}'); if (['phone','tablet'].includes(saved.layout)) prefs.layout=saved.layout; if(typeof saved.rotate==='boolean') prefs.rotate=saved.rotate; } catch (_) {}
+  let prefs = { layout: 'phone', rotate: true, orientation: 'any' };
+  try { const saved = JSON.parse(localStorage.getItem('adc-screen') || '{}'); if (['phone','tablet'].includes(saved.layout)) prefs.layout=saved.layout; if(typeof saved.rotate==='boolean') prefs.rotate=saved.rotate; prefs.orientation=['any','portrait','landscape'].includes(saved.orientation)?saved.orientation:(saved.rotate===false?'portrait':'any'); } catch (_) {}
   const save = () => { try {localStorage.setItem('adc-screen',JSON.stringify(prefs));} catch (_) {} };
   root.dataset.screen=prefs.layout;
   const dialog=document.createElement('dialog');
   dialog.className='screen-dialog';
   dialog.setAttribute('aria-labelledby','screen-title');
-  dialog.innerHTML='<div class="screen-heading"><h2 id="screen-title">Schermo</h2><button type="button" class="close" data-screen-close aria-label="Chiudi impostazioni schermo">Chiudi</button></div><p class="note">Scegli come visualizzare la scheda treno.</p><fieldset><legend>Formato schermo</legend><label class="screen-choice"><input type="radio" name="screen-layout" value="phone"><span><b>Telefono</b><small>Vista compatta, adatta a uno schermo piccolo.</small></span></label><label class="screen-choice"><input type="radio" name="screen-layout" value="tablet"><span><b>Tablet</b><small>Più spazio per località, colonne e dettagli.</small></span></label></fieldset><label class="screen-choice"><input type="checkbox" id="screen-rotate"><span><b>Rotazione automatica</b><small>Adatta la scheda quando giri il dispositivo.</small></span></label><p class="note" id="screen-result" role="status"></p>';
+  dialog.innerHTML='<div class="screen-heading"><h2 id="screen-title">Schermo</h2><button type="button" class="close" data-screen-close aria-label="Chiudi impostazioni schermo">Chiudi</button></div><p class="note">Scegli come visualizzare la scheda treno.</p><fieldset><legend>Formato schermo</legend><label class="screen-choice"><input type="radio" name="screen-layout" value="phone"><span><b>Telefono</b><small>Vista compatta, adatta a uno schermo piccolo.</small></span></label><label class="screen-choice"><input type="radio" name="screen-layout" value="tablet"><span><b>Tablet</b><small>Più spazio per località, colonne e dettagli.</small></span></label></fieldset><fieldset><legend>Orientamento</legend><label class="screen-choice"><input type="radio" name="screen-orientation" value="any"><span><b>Automatico</b><small>Segue la rotazione del dispositivo.</small></span></label><label class="screen-choice"><input type="radio" name="screen-orientation" value="portrait"><span><b>Verticale</b></span></label><label class="screen-choice"><input type="radio" name="screen-orientation" value="landscape"><span><b>Orizzontale</b></span></label></fieldset><p class="note">Applica orientamento apre la modalità a schermo intero, richiesta da Chrome per controllare la rotazione. Per Automatico, lascia attiva anche la rotazione del dispositivo.</p><button class="btn" type="button" id="screen-apply">Applica orientamento</button><button class="btn" type="button" id="screen-exit-full" hidden>Esci da schermo intero</button><p class="note" id="screen-result" role="status" aria-live="polite"></p>';
   document.body.append(dialog);
   const result=dialog.querySelector('#screen-result');
-  const rotate=dialog.querySelector('#screen-rotate');
-  rotate.checked=prefs.rotate;
-  dialog.querySelector('[value="'+prefs.layout+'"]').checked=true;
-  result.textContent='Per ruotare lo schermo, abilita anche la rotazione automatica nelle impostazioni del telefono o tablet.';
+  const orientationInputs=[...dialog.querySelectorAll('[name="screen-orientation"]')];
+  const apply=dialog.querySelector('#screen-apply');
+  const exitFull=dialog.querySelector('#screen-exit-full');
+  dialog.querySelector('[name="screen-orientation"][value="'+prefs.orientation+'"]').checked=true;
+  dialog.querySelector('[name="screen-layout"][value="'+prefs.layout+'"]').checked=true;
+  result.textContent='Seleziona un orientamento e premi Applica. La scelta salvata viene applicata solo dopo la conferma del browser.';
   let opener;
   const menu=document.createElement('dialog');
   menu.id='app-options';menu.className='app-options';menu.setAttribute('aria-labelledby','options-title');
@@ -37,17 +39,39 @@
   dialog.addEventListener('close',()=>opener?.focus());
   dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
   dialog.querySelectorAll('[name="screen-layout"]').forEach(input=>input.addEventListener('change',()=>{prefs.layout=input.value;root.dataset.screen=prefs.layout;save();}));
-  rotate.addEventListener('change',async()=>{
-    if(rotate.checked){
-      try {screen.orientation?.unlock?.();prefs.rotate=true;save();result.textContent='Rotazione automatica attiva. Se lo schermo resta fermo, controlla il blocco rotazione del dispositivo.';}
-      catch(_){rotate.checked=prefs.rotate;result.textContent='Il browser non consente di cambiare orientamento. Usa le impostazioni del dispositivo.';}
-    }else{
-      try {if(!screen.orientation?.lock)throw Error();await screen.orientation.lock('portrait');prefs.rotate=false;save();result.textContent='Orientamento verticale bloccato.';}
-      catch(_){rotate.checked=true;prefs.rotate=true;save();result.textContent='Il blocco verticale non è disponibile in questo browser. Puoi bloccare la rotazione dalle impostazioni del dispositivo.';}
+  let applied=false;
+  apply.addEventListener('click',async()=>{
+    const scelta=dialog.querySelector('[name="screen-orientation"]:checked').value;
+    let entered=false;
+    apply.disabled=true;orientationInputs.forEach(input=>input.disabled=true);
+    try {
+      if(typeof screen.orientation?.lock!=='function') throw new Error('unsupported');
+      if(!document.fullscreenElement){
+        if(typeof root.requestFullscreen!=='function') throw new Error('unsupported');
+        await root.requestFullscreen();entered=true;
+      }
+      await screen.orientation.lock(scelta);
+      prefs.orientation=scelta;prefs.rotate=scelta==='any';save();applied=true;
+      result.textContent=scelta==='any'?'Rotazione automatica applicata in schermo intero. Gira il dispositivo.':(scelta==='portrait'?'Orientamento verticale applicato.':'Orientamento orizzontale applicato.');
+    } catch(err) {
+      if(entered && document.fullscreenElement){try{await document.exitFullscreen();}catch(_){}}
+      result.textContent=err.message==='unsupported'?'Questo browser non offre il controllo dell’orientamento. La scelta non è stata applicata.':'Chrome non ha consentito il cambio di orientamento. La scelta non è stata salvata; riprova da Applica orientamento.';
+    } finally {
+      apply.disabled=false;orientationInputs.forEach(input=>input.disabled=false);
+      exitFull.hidden=!document.fullscreenElement;
     }
   });
-  if(prefs.rotate){try{screen.orientation?.unlock?.();}catch(_){}}
-  else if(screen.orientation?.lock){screen.orientation.lock('portrait').catch(()=>{prefs.rotate=true;rotate.checked=true;save();});}
-  else {prefs.rotate=true;rotate.checked=true;save();}
+  exitFull.addEventListener('click',async()=>{
+    try {await document.exitFullscreen();}
+    catch(_){result.textContent='Usa il comando del browser per uscire da schermo intero.';}
+  });
+  document.addEventListener('fullscreenchange',()=>{
+    exitFull.hidden=!document.fullscreenElement;
+    if(!document.fullscreenElement && applied){
+      try{screen.orientation?.unlock?.();}catch(_){}
+      applied=false;result.textContent='Schermo intero terminato: l’orientamento torna al controllo del dispositivo. Premi Applica per riapplicare la scelta.';
+    }
+  });
+  // Nessun tentativo di blocco all’avvio: Chrome richiede un gesto esplicito dell’utente.
+  try{screen.orientation?.unlock?.();}catch(_){}
 })();
-
