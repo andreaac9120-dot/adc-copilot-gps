@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.28 — versione unica
+# ADC COPILOT 1.0.29 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -9,6 +9,8 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
 ## Generatore senza IA (prova, 1.0.17–1.0.23)
+
+1.0.29: generatore senza IA con la sola Scheda Treno (prova reale treno 47033 del 02/11/2026, prima pagina intestata DE18 senza «Valida per»). Data del treno dalla prima pagina che la riporta; mezzo intestatario anche diesel (DE18); senza traccia le locomotive vengono dai mezzi intestatari di ogni pagina, ognuna sul suo tratto. A parità di linee si sceglie quella coerente con le progressive doppie della Scheda (prima = arrivo, ultima = partenza: inversione ad Alessandria Sm); a parità di progressiva vince il nome più simile; tolleranza di 2 m inclusa. PL, P.L.A., Plp e RTB della Scheda non entrano nel pacchetto. Stesse correzioni nei programmi Python del database (commit 5e73e9e). Serve il database del 02/11/2026 ore 10:18 o successivo.
 
 1.0.28: rimosse le diciture PERCORRIBILE e NON PERCORRIBILE dai nomi visualizzati delle linee affiancate. Le condizioni nelle note mantengono la A gialla anche quando un vecchio titolo riporta PERCORRIBILE. Nessuna modifica ai viaggi salvati.
 

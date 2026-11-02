@@ -44,7 +44,8 @@
     if (m) { h.valida_dal = m[1]; h.termine = m[2].trim(); h.valida_al = m[3]; }
     m = /Classificazione[\s\S]*?Prestazione[\s\S]*?\n\s*(\S+)\s+(\S+)\s*(\S*)/.exec(testo);
     if (m) { h.classificazione = m[1]; h.prestazione = m[2]; }
-    m = /Int\. alla Sigla[\s\S]*?\n[\s\S]*?(E\d{3,4}\S*)\s+(RSC\S*)/.exec(testo);
+    // mezzo intestatario: elettrico (E494) o diesel (DE18, D145…)
+    m = /Int\. alla Sigla[\s\S]*?\n[\s\S]*?\b([A-Z]{1,3}\s?\d{2,4}(?:[.\-]\d+)?)\s+(RSC\S*)/.exec(testo);
     if (m) { h.mezzo_sigla = m[1]; h.rsc = m[2]; }
     m = /Valida per il treno del (\d{2}\/\d{2}\/\d{4})/.exec(testo);
     if (m) h.valida_per = m[1];
@@ -198,6 +199,9 @@
       if (vals.size > 1) out.controlli.push(`intestazione: «${k}» diverso tra le pagine: {${[...vals].join(", ")}}`);
     }
     for (const r of out.righe) if (!r.km.length) out.controlli.push(`pag. ${r.pag}: «${r.nome}» senza progressiva`);
+    // «Valida per il treno del» può mancare in qualche pagina (es. la prima): vale per tutta la Scheda
+    const vp = (Pg.find(h => h.valida_per) || {}).valida_per;
+    if (vp) for (const h of Pg) if (!h.valida_per) h.valida_per = vp;
     out.intestazione = Pg.length ? Pg[0] : {};
     return out;
   }

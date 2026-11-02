@@ -46,10 +46,21 @@
     const treni = [];
     for (const p of S.pagine) { const t = p.treno; if (t && (!treni.length || treni[treni.length - 1] !== t)) treni.push(t); }
     let data = null;
-    const vp = S.intestazione.valida_per;
+    const vp = (S.pagine.find(p => p.valida_per) || {}).valida_per || S.intestazione.valida_per;
     if (vp) { const [g, m_, a] = vp.split("/"); data = `${a}-${m_}-${g}`; }
-    return { treni, data, loco: [], tratte: [], localita: [], controlli: [], da_scheda: true };
+    // mezzi intestatari della sigla pagina per pagina (es. DE18 Sannazzaro → Alessandria Sm, poi E494 fino a Chiasso Sm):
+    // come le locomotive della traccia, ognuno vale solo sul suo tratto (da → a)
+    const mezzi = [];
+    for (const p of S.pagine) {
+      const tipo = tipoLoco(p.mezzo_sigla);
+      if (!tipo) continue;
+      if (mezzi.length && mezzi[mezzi.length - 1].tipo === tipo) mezzi[mezzi.length - 1].a = p.a || mezzi[mezzi.length - 1].a;
+      else mezzi.push({ tipo, numero: "", da: p.da, a: p.a, da_scheda: true });
+    }
+    return { treni, data, loco: mezzi, tratte: [], localita: [], controlli: [], da_scheda: true };
   }
+  // PL, P.L.A., Plp e RTB non si registrano (scheda 00c): l'utente li legge dalle immagini delle fiancate principali
+  const NO_PL = /^\s*(P\.?\s?L\.?(\s?A\.?)?(\s|$|km)|Plp|R\.?T\.?B\.?)/i;
   // «E494», «E 494», «E494.504», «E494-504» → E494 (lettere e prime cifre)
   function tipoLoco(testo) {
     const m = /^\s*([A-Za-z]+)\s*(\d+)/.exec(testo || "");
@@ -66,7 +77,11 @@
       return [{ tipo, etichetta: locoUtente.trim() }];
     }
     // F04: dalla traccia anche il tratto percorso da ogni locomotiva (da → a), risolto più sotto sull'itinerario
-    if (Tr.loco.length) return Tr.loco.map(l => ({ tipo: l.tipo, etichetta: `${l.tipo}-${l.numero}`, da: l.da, a: l.a }));
+    if (Tr.loco.length) {
+      if (Tr.loco.some(l => l.da_scheda))
+        R.push("  ! LOCOMOTIVA presa dalla Scheda Treno: è il mezzo intestatario della sigla di ogni pagina, non necessariamente quello che traina il treno: verificare (o indicare la locomotiva)");
+      return Tr.loco.map(l => ({ tipo: l.tipo, etichetta: l.numero ? `${l.tipo}-${l.numero}` : `${l.tipo} (intestatario della sigla)`, da: l.da, a: l.a }));
+    }
     const ms = S ? S.intestazione.mezzo_sigla : null, tipo = tipoLoco(ms);
     if (tipo) {
       R.push(`  ! LOCOMOTIVA presa dalla Scheda Treno: ${ms} è il mezzo intestatario della sigla, non necessariamente quello che traina il treno: verificare (o indicare la locomotiva)`);
@@ -155,17 +170,23 @@
         const kms = r.km.map(k => parseFloat(k));
         const cand = [];
         for (const p of punti) {
-          if (kms.some(k => Math.abs(p.km - k) <= 0.002)) {
+          if (kms.some(k => Math.abs(p.km - k) <= 0.002 + 1e-9)) {
             const l = locPer.get(p.loc_id);
             let sim = Math.max(...nomiDb(l).map(n => simile(r.nome, n)));
             if (r.nome_traccia) sim = Math.max(sim, Math.max(...nomiDb(l).map(n => simile(r.nome_traccia, n))));
-            if (sim >= 0.6) cand.push([p.loc_id, p.linea_id, p.km]);
+            if (sim >= 0.6) cand.push([p.loc_id, p.linea_id, p.km, sim]);
           }
+        }
+        // a parità di progressiva vince il nome più simile (es. «MILANO ROGORED» 0,000 non è Mi Smistamento 0,000)
+        if (cand.length) {
+          const smax = Math.max(...cand.map(c => c[3]));
+          const tenuti = cand.filter(c => c[3] >= smax - 1e-9).map(c => c.slice(0, 3));
+          cand.length = 0; cand.push(...tenuti);
         }
         if (r.tipo === "loc" || cand.length) {
           sequenza.push({ riga: r, cand });
           if (cand.length) ultima = sequenza.length - 1;   // indice dell'ultima località riconosciuta
-        } else if (ultima !== null && r.km.length) {
+        } else if (ultima !== null && r.km.length && !NO_PL.test(r.nome || "")) {
           const ps = { dopo: ultima, km: r.km[0], n: r.nome };   // indice della località: diventa l'id del passaggio più sotto
           for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) ps[k2] = r[k1];
           puntiScheda.push(ps);
@@ -206,8 +227,24 @@
         corse.set(linea, j);
       }
       const migliore = Math.max(...corse.values());
-      const scelte = [...corse].filter(([, j]) => j === migliore).map(([l]) => l);
+      let scelte = [...corse].filter(([, j]) => j === migliore).map(([l]) => l);
       if (migliore === i) { i++; continue; }
+      if (scelte.length > 1 && S) {
+        // progressive doppie della Scheda (es. «ALESSANDRIA SM 1,229 1,406»): la prima è della linea di arrivo,
+        // l'ultima di quella di partenza → a parità di località si sceglie la linea coerente con queste
+        const kmOk = (k, linea, quale) => {
+          const kk = sequenza[k].riga.km || [];
+          if (kk.length < 2) return 0;
+          const v = parseFloat(quale === 0 ? kk[0] : kk[kk.length - 1]);
+          return Math.abs(su(k, linea)[2] - v) <= 0.002 + 1e-9 ? 1 : 0;
+        };
+        const punteggi = new Map(scelte.map(l => [l, kmOk(i, l, -1) + kmOk(migliore, l, 0)]));
+        const top = Math.max(...punteggi.values());
+        if (top > 0 && [...punteggi.values()].filter(v => v === top).length === 1) {
+          scelte = scelte.filter(l => punteggi.get(l) === top);
+          R.push(`  ${sequenza[i].riga.nome} → ${sequenza[migliore].riga.nome}: linea ${scelte[0]} scelta dalle progressive doppie della Scheda (prima = arrivo, ultima = partenza)`);
+        }
+      }
       if (scelte.length > 1) {
         R.push(`  ! ${sequenza[i].riga.nome}: più linee possibili [${scelte.sort().map(x => "'" + x + "'").join(", ")}]: serve la scelta dell'utente`);
         ambigua = `${sequenza[i].riga.nome}: più linee possibili (${scelte.sort().join(", ")})`;
