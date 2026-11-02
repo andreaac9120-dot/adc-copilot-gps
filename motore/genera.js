@@ -585,7 +585,12 @@
     // PGOS-CTI All. IX art. 9 c.3: sigla 11 mai sui tratti con grado di frenatura IX; sigla 12 mai su VII, VIII, IX
     const vietati = { "11": ["IX"], "12": ["VII", "VIII", "IX"] }[colId];
     if (vietati && sig.length) {
-      const righeG = T.fiancata.filter(r => r.linea_id === ol.linea_id && r.senso === (sensoO || "") && (r.tipo === "grado" || /rado/i.test(r.testo || "")));
+      // solo il tratto affiancato effettivamente percorso (rapporto di verifica normativa 02/11/2026, punto 4)
+      const aLo = Math.min(ol.km_da || 0, ol.km_a || 0), aHi = Math.max(ol.km_da || 0, ol.km_a || 0);
+      const kmLoc = new Map(T.punti_linea.filter(p => p.linea_id === ol.linea_id).map(p => [p.loc_id, p.km]));
+      const kmR = r => (r.km !== null && r.km !== undefined ? r.km : (kmLoc.has(r.presso_loc) ? kmLoc.get(r.presso_loc) : -1e9));
+      const righeG = T.fiancata.filter(r => r.linea_id === ol.linea_id && r.senso === (sensoO || "") && (r.tipo === "grado" || /rado/i.test(r.testo || ""))
+        && kmR(r) >= aLo - 1e-9 && kmR(r) <= aHi + 1e-9);
       const trov = new Set();
       for (const r of righeG) for (const mm of (r.testo || "").matchAll(/[Gg]rado(?: di frenatura)?\s+(VIII|VII|IX)\b/g)) if (vietati.includes(mm[1])) trov.add(mm[1]);
       const trovati = [...trov].sort();

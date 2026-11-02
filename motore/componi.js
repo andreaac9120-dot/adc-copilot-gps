@@ -242,7 +242,7 @@
         const top = Math.max(...punteggi.values());
         if (top > 0 && [...punteggi.values()].filter(v => v === top).length === 1) {
           scelte = scelte.filter(l => punteggi.get(l) === top);
-          R.push(`  ${sequenza[i].riga.nome} → ${sequenza[migliore].riga.nome}: linea ${scelte[0]} scelta dalle progressive doppie della Scheda (prima = arrivo, ultima = partenza)`);
+          R.push(`  ${sequenza[i].riga.nome} → ${sequenza[migliore].riga.nome}: linea ${scelte[0]} scelta dalle progressive doppie della Scheda (prima = arrivo, ultima = partenza): RICOSTRUITA, da confermare sul FL – nessuna norma fissa l'ordine delle due progressive (PGOS-CTI All. IX art. 2/5)`);
         }
       }
       if (scelte.length > 1) {
