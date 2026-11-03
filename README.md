@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.37 — versione unica
+# ADC COPILOT 1.0.39 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,15 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.39 (03/11/2026) – cambio di sigla a metà pagina della Scheda Treno
+
+Correzione del lettore della Scheda Treno e del compositore del viaggio (generatore senza IA), dalla Scheda del treno 46593/46592 del 03/11/2026:
+- l'**intestazione ripetuta a metà pagina** (Prestazione / Int. alla Sigla / Sigla di Composizione, es. «DE18» dopo Alessandria Sm.) non viene più letta come una località: prima interrompeva l'itinerario («ITINERARIO PARZIALE»);
+- la località ripetuta subito dopo quell'intestazione è unita alla riga precedente (un solo passaggio, con l'indicatore di partenza);
+- mezzo intestatario della sigla, sigla e % freno si leggono **riga per riga** (valgono partendo da ogni località): senza traccia e senza locomotiva indicata, ogni tratto prende il mezzo della sua località di partenza. Prima, se le località Da/A delle pagine non erano nel database (es. «P.L.A. km 3+859»), tutti i mezzi finivano su tutti i tratti e un mezzo assente dal database (DE18) rendeva gialle tutte le A.
+
+Stesse correzioni in `lettori/leggi_scheda.py` e `lettori/componi_viaggio.py` del database dati di linea.
 
 ## 1.0.38 (02/11/2026) – tolti i comandi di studio con IA
 

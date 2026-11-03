@@ -70,6 +70,20 @@ test("solo Scheda Treno: numeri e data dalla Scheda, locomotiva dal campo o dall
   assert.equal(Co.componi(T, null, S(), "zz").ok, false);
 });
 
+test("Scheda con cambio di sigla: mezzo intestatario per tratto dalla località di partenza (1.0.39)", () => {
+  const T3 = { ...T, localita: [...T.localita, { loc_id: "gamma", nome: "Gamma", tipo: "stazione", alias: null }],
+    punti_linea: [...T.punti_linea, { linea_id: "L1", loc_id: "gamma", km: 20, km_txt: "20,000", fonte: "FLX", pag: "1", st: "V" }] };
+  const h = { treno: "12345", valida_per: "03/11/2026", mezzo_sigla: "E494", sigla: "M100A", freno: "P105%", fl: [], pdf_pag: 1 };
+  const S = { intestazione: h, pagine: [h], controlli: [], moduli: [], righe: [
+    { nome: "Alfa", tipo: "loc", km: ["0.000"], pag: 1, mezzo_sigla: "E494", sigla: "M100A", freno: "P105%" },
+    { nome: "Beta", tipo: "loc", km: ["10.000"], pag: 1, mezzo_sigla: "DE18", sigla: "M100A", freno: "P105%", cambio_sigla: { mezzo_sigla: "DE18" } },
+    { nome: "Gamma", tipo: "loc", km: ["20.000"], pag: 1, mezzo_sigla: "DE18", sigla: "M100A", freno: "P105%" }] };
+  // un solo tratto Alfa → Gamma sulla stessa linea: prende il mezzo della località di partenza (E494), non tutti e due
+  const c = Co.componi(T3, null, S);
+  assert.ok(c.ok, c.rapporto.join("\n"));
+  assert.deepEqual(c.viaggio.loco.map(l => [l.tipo, [...l.tratti]]), [["E494", [0]]]);
+});
+
 test("pagine FL: gruppi solo con le immagini presenti nel telefono (1.0.21)", () => {
   const lid = T.linee[0].linea_id, Tr = LT.leggi(TRACCIA), c = Co.componi(T, Tr, null);
   const s = Object.values(G.genera(T, c.viaggio).condotta.SEG)[0];

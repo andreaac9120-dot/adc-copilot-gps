@@ -292,6 +292,17 @@
     // Ambito delle locomotive della traccia (F04): ogni locomotiva vale solo sui tratti tra la sua località «da» e «a»
     // (cambio mezzo, doppia trazione su una parte). Se non si riesce a collocarla resta su tutti i tratti, con avviso.
     const chiamata = (s, nome) => [s.riga.nome, s.riga.nome_traccia].some(n => n && simile(n, nome) >= 0.8);
+    // Senza traccia e senza locomotiva indicata: il mezzo intestatario della sigla si legge riga per riga (vale partendo
+    // dalla riga, anche dopo un cambio di sigla a metà pagina); ogni tratto prende quello della sua località di partenza,
+    // così non serve ritrovare per nome le località Da/A delle pagine.
+    if (S && Tr.da_scheda && !(locoUtente && String(locoUtente).trim()) && estremi.length && estremi.every(([a_]) => sequenza[a_].riga.mezzo_sigla)) {
+      const perTipo = new Map();
+      estremi.forEach(([a_], k) => {
+        const tipo = tipoLoco(sequenza[a_].riga.mezzo_sigla);
+        if (tipo) { if (!perTipo.has(tipo)) perTipo.set(tipo, []); perTipo.get(tipo).push(k); }
+      });
+      if (perTipo.size) loco = [...perTipo].map(([t, tr]) => ({ tipo: t, etichetta: `${t} (intestatario della sigla)`, tratti: tr }));
+    }
     for (const l of loco) {
       if (!("da" in l)) continue;
       const da = l.da, a = l.a; delete l.da; delete l.a;
@@ -335,7 +346,9 @@
       estremi.forEach(([a_, b_], k) => {
         const riga = sequenza[Math.min(a_ + 1, b_)].riga;   // prima riga dopo l'inizio: il tratto appartiene a quella pagina
         const h = pagH.get(riga.pag) || S.intestazione;
-        const sg = h.sigla || S.intestazione.sigla, fr = h.freno || S.intestazione.freno;
+        let sg = h.sigla || S.intestazione.sigla, fr = h.freno || S.intestazione.freno;
+        const part = sequenza[a_].riga;                    // sigla letta riga per riga (anche dopo un cambio a metà pagina)
+        if (part.sigla && part.freno) { sg = part.sigla; fr = part.freno; }
         const [col] = scegliColonna(sg, fr);
         itinerario[k].sigla = `${sg || ""} ${fr || ""}`.trim();
         itinerario[k].colonna_sigle = col || "";
