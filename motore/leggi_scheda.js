@@ -6,6 +6,7 @@
   const PP = typeof module !== "undefined" && module.exports ? require("./pdfparole.js") : root.PdfParole;
   const ORA = /^\d{1,2}\.\d{2}½?$/;
   const NUM = /^\d+(\.\d+)?$/;
+  const BANDA_INT = 30;   // altezza (punti) dell'intestazione ripetuta a metà pagina, dalla riga «Prestazione»
   const PUNTO = /^(Cippo|Dev\.|Dev |Segn|V\.COD|SI COD|Seg\.|PBA|P\.L\.|RTB)/i;
   // confini delle colonne (punti, pagina con «Località» a x=204)
   const COL = [["grado", 0, 58], ["vls", 58, 92], ["vmarc", 92, 122], ["km", 122, 163],
@@ -69,7 +70,27 @@
     const topTab = ancora ? ancora.top + 15 : 205;
     const fw = parole.find(w => w.top > topTab && w.fontname.endsWith("CourierNewPS-BoldMT"));
     const fine = fw ? fw.top : 800;
-    const corpo = parole.filter(w => topTab < w.top && w.top < fine - 2);
+    let corpo = parole.filter(w => topTab < w.top && w.top < fine - 2);
+    // intestazione ripetuta a metà pagina (cambio di sigla, es. «Int. alla Sigla DE18» dopo Alessandria Sm.):
+    // non è una riga della tabella; dice da quale località cambiano mezzo intestatario, sigla e % freno
+    const cambi = [];
+    const tops = [...new Set(corpo.filter(w => w.text === "Prestazione" && w.fontname.toLowerCase().includes("courier")).map(w => round1(w.top)))].sort((a, b) => a - b);
+    for (const t of tops) {
+      const banda = corpo.filter(w => t - 2 <= w.top && w.top <= t + BANDA_INT);
+      const val = banda.filter(w => w.top > t + 5).map((w, i) => [w, i])
+        .sort((a, b) => pyRound(a[0].top) - pyRound(b[0].top) || a[0].x0 - b[0].x0 || a[1] - b[1]).map(a => a[0].text);
+      const c = {};
+      for (const v of val) {
+        if (/^RSC/.test(v)) { if (!("rsc" in c)) c.rsc = v; }
+        else if (/^M?\d+[ABCP]$/.test(v)) { if (!("sigla" in c)) c.sigla = v; }
+        else if (/^[PG]\d+%$/.test(v)) { if (!("freno" in c)) c.freno = v; }
+        else if (/^\d+t$/.test(v)) { if (!("prestazione" in c)) c.prestazione = v; }
+        else if (/^[A-Z]{1,3}\s?\d{2,4}(?:[.\-]\d+)?$/.test(v) && !("mezzo_sigla" in c)) c.mezzo_sigla = v;
+      }
+      cambi.push([t + BANDA_INT, c]);
+      const fuori = new Set(banda);
+      corpo = corpo.filter(w => !fuori.has(w));
+    }
     for (const w of corpo) w.col = colDi(w.x0, shift);
 
     const righe = [];
@@ -96,6 +117,10 @@
         .map((w, i) => [w, i]).sort((a, b) => a[0].top - b[0].top || a[1] - b[1]).map(a => a[0]);
       r.km = km.map(w => w.text);
       righe.push(r);
+    }
+    for (const [fineBanda, c] of cambi) {
+      const r = righe.find(r => r.top > fineBanda);
+      if (r) r.cambio_sigla = c;
     }
     const usateTop = righe.map(r => r.top);
     const orfane = corpo.filter(w => ["grado", "vls", "vmarc", "vill", "simb"].includes(w.col) && !usateTop.some(t => Math.abs(w.top - t) <= 4.5)).map(w => w.text);
@@ -169,15 +194,33 @@
         out.pagine.push(h);
         const { righe, orfane, note } = righeScheda(P);
         for (const r of righe) r.pag = i;
+        // mezzo intestatario, sigla e % freno valgono PARTENDO da ogni riga: dall'intestazione della pagina,
+        // poi dall'intestazione ripetuta a metà pagina (cambio di sigla)
+        const cur = {};
+        for (const k of ["mezzo_sigla", "sigla", "freno"]) if (h[k]) cur[k] = h[k];
+        const pieno = x => !(x === undefined || x === null || x === false || x === "" || (Array.isArray(x) && !x.length));
+        const unisci = (ult, r, chiave) => {
+          for (const [k, v] of Object.entries(r)) if (k !== "pag" && k !== "top" && k !== "cambio_sigla" && pieno(v) && !pieno(ult[k])) ult[k] = v;
+          (ult[chiave] = ult[chiave] || []).push(i);
+          Object.assign(ult, cur);
+        };
+        // la prima riga di una pagina ripete l'ultima della precedente
         if (out.righe.length && righe.length && righe[0].nome === out.righe[out.righe.length - 1].nome) {
-          const prima = righe.shift(), ult = out.righe[out.righe.length - 1];
-          for (const [k, v] of Object.entries(prima)) {
-            const pieno = x => !(x === undefined || x === null || x === false || x === "" || (Array.isArray(x) && !x.length));
-            if (k !== "pag" && k !== "top" && pieno(v) && !pieno(ult[k])) ult[k] = v;
-          }
-          (ult.ripetuta_pag = ult.ripetuta_pag || []).push(i);
+          const prima = righe.shift();
+          if (prima.cambio_sigla) righe.unshift(prima);        // gestita sotto come cambio di sigla
+          else unisci(out.righe[out.righe.length - 1], prima, "ripetuta_pag");
         }
-        out.righe.push(...righe);
+        for (const r of righe) {
+          const c = r.cambio_sigla;
+          if (c) {
+            for (const k of ["mezzo_sigla", "sigla", "freno"]) if (c[k]) cur[k] = c[k];
+            // dopo l'intestazione ripetuta la Scheda ripete la località del cambio: è la stessa riga
+            const ult = out.righe[out.righe.length - 1];
+            if (ult && ult.nome === r.nome) { unisci(ult, r, "ripetuta_cambio_pag"); ult.cambio_sigla = c; continue; }
+          }
+          Object.assign(r, cur);
+          out.righe.push(r);
+        }
         if (orfane.length) out.controlli.push(`pag. ${i}: valori senza riga: ${reprLista(orfane)}`);
         for (const n of note) if (!out.note.includes(n)) out.note.push(n);
       } else if (testo.slice(0, 600).includes("M3") && testo.includes("RALLENTAMENTI")) {
