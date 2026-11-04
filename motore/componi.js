@@ -19,6 +19,7 @@
   function simile(a, b) {
     a = norm(a); b = norm(b);
     if (!a || !b) return 0;
+    if (a === b) return 1;   // 1.0.40: uguale vince sul prefisso («TORINO STURA» / «TORINO STURA ORIGINE AV»)
     if (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a))) return 0.95;
     return C.ratio(a, b);
   }
@@ -195,8 +196,12 @@
     } else {
       for (const a_ of Tr.localita) {
         let cand = [];
+        // 1.0.40: come con la Scheda, a parità vince il nome più simile (es. «TORINO STURA» non è Torino P. Susa, 0,82)
+        const sims = new Map(locDb.map(l => [l.loc_id, Math.max(...nomiDb(l).map(n => simile(a_, n)))]));
+        const smax = Math.max(0, ...sims.values());
         for (const l of locDb) {
-          if (Math.max(...nomiDb(l).map(n => simile(a_, n))) >= 0.8)
+          const s_ = sims.get(l.loc_id);
+          if (s_ >= 0.8 && s_ >= smax - 1e-9)
             cand = cand.concat(punti.filter(p => p.loc_id === l.loc_id).map(p => [p.loc_id, p.linea_id, p.km]));
         }
         sequenza.push({ riga: { nome: a_, km: [] }, cand });

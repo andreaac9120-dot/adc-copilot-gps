@@ -104,3 +104,15 @@ test("pagine FL: gruppi solo con le immagini presenti nel telefono (1.0.21)", ()
   assert.ok(!p.aperti.some(a => a.cosa.startsWith("Pagine FL")));
   assert.equal(controlla(JSON.parse(JSON.stringify(p))).length, 0);
 });
+
+test("sola traccia: nome uguale vince sul prefisso e vince il nome più simile (1.0.40)", () => {
+  assert.equal(Co.simile("TORINO STURA", "Torino Stura"), 1);
+  assert.equal(Co.simile("TORINO STURA", "TORINO STURA ORIGINE AV"), 0.95);
+  const T4 = JSON.parse(JSON.stringify(T));
+  T4.localita.push({ loc_id: "alfa_av", nome: "Alfa Origine AV", tipo: "punto", alias: null });
+  T4.punti_linea.push({ linea_id: "L1", loc_id: "alfa_av", km: 1, km_txt: "1,000", fonte: "FLX", pag: "1", st: "V" });
+  const Tr = { treni: ["1"], data: "2026-11-04", loco: [], tratte: [{ da: "ALFA", a: "BETA" }], localita: ["ALFA", "BETA"], controlli: [] };
+  const c = Co.componi(T4, Tr, null, "E494");
+  assert.equal(c.viaggio.itinerario.length, 1);
+  assert.equal(c.viaggio.itinerario[0].da, "alfa");
+});

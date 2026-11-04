@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.39 — versione unica
+# ADC COPILOT 1.0.40 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,14 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.40 (04/11/2026) – riconoscimento delle località con la sola traccia
+
+Correzione del compositore del viaggio (generatore senza IA), dalla traccia del treno 67351 del 04/11/2026 (Modane → Quattro Ville Z.I.):
+- con la **sola traccia** una località della traccia prende solo le località del database con il **nome più simile** (prima tutte quelle sopra la soglia 0,8: «TORINO PORTA SUSA» prendeva anche Torino Orbassano, «TORINO STURA» anche Torino P. Susa, e l'itinerario si fermava con «più linee possibili»);
+- un **nome uguale vince sul prefisso** («TORINO STURA» = Torino Stura, non Torino Stura Origine AV).
+
+Stesse correzioni in `lettori/componi_viaggio.py` del database dati di linea (commit m28 del 04/11/2026). Serve il database del 04/11/2026 (FL 2 e FL 4 Torino) per il percorso Modane – Torino – Novara.
 
 ## 1.0.39 (03/11/2026) – cambio di sigla a metà pagina della Scheda Treno
 
