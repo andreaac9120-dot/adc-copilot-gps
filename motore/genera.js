@@ -352,31 +352,42 @@
     }
 
     // ------------------------------------------------------------- pagine FL (solo quelle le cui immagini sono nel telefono)
-    // Per ogni linea e senso (tutte le pagine della linea, senza filtro km): gruppo "fianc" (fiancate principali
-    // sx/dx, poi fiancata di linea) e gruppo "schema". Le immagini restano nell'archivio del telefono: qui solo i percorsi.
+    // Per ogni località: fiancate principali (sx/dx o uniche) della SOLA pagina che contiene la sua progressiva
+    // (km_da–km_a della riga pagine_fl; due pagine se la località è al confine o in un buco tra due pagine;
+    // pagina senza km = sempre mostrata), poi le fiancate di linea; gruppo "schema" per linea e senso.
+    // Gruppi uguali tra località vicine si riusano (stessa chiave). Le immagini restano nell'archivio del telefono.
     const FLPAG = {}, FLLOC = {}, immagini = {};
     const DESCR = { principale: "principale", principale_sx: "principale sinistro", principale_dx: "principale destro",
       fiancata_linea: "fiancata di linea", schema: "schema unifilare" };
-    const senza = [], vuoti = new Set();
+    const senza = [], gruppiPag = {};
     const cImg = p => !!(imgDisp && imgDisp.has(p.img));
+    const nKm = v => typeof v === "number" && isFinite(v);
+    const contiene = (p, km) => !nKm(p.km_da) || !nKm(p.km_a) || (p.km_da - 0.001 <= km && km <= p.km_a + 0.001);
+    const ordPag = (a, b) => ((a.tipo === "fiancata_linea") - (b.tipo === "fiancata_linea")) || cmpStr(a.fonte, b.fonte) ||
+      ((a.pag_pdf || 0) - (b.pag_pdf || 0)) || cmpStr(a.img, b.img);
     for (const o of occ) {
-      const t = o.out || o.inn, L = t.linea, s = t.senso;
+      const t = o.out || o.inn, L = t.linea, s = t.senso, km = kmSu(t, o.loc);
       const rr = T.pagine_fl.filter(p => p.linea_id === L.linea_id && (p.senso === s || p.senso === "entrambi") && p.img !== null && p.img !== undefined);
-      for (const [chiave, tipi] of [["fianc", ["principale", "principale_sx", "principale_dx", "fiancata_linea"]], ["schema", ["schema"]]]) {
-        const k = `${L.linea_id}_${s}_${chiave}`;
-        if (!has(FLPAG, k) && !vuoti.has(k)) {
-          const sel = rr.filter(p => tipi.includes(p.tipo)).sort((a, b) =>
-            ((a.tipo === "fiancata_linea") - (b.tipo === "fiancata_linea")) || cmpStr(a.fonte, b.fonte) ||
-            ((a.pag_pdf || 0) - (b.pag_pdf || 0)) || cmpStr(a.img, b.img));
-          const pag = sel.filter(cImg).map(p => ({ t: `${p.pag} ${DESCR[p.tipo]}`, img: p.img, src: db.src(p.fonte, p.pag) }));
-          if (!pag.length) { vuoti.add(k); continue; }
-          for (const p of sel) usa(p.fonte);
+      const tutteP = rr.filter(p => /^principale/.test(p.tipo));
+      let princ = tutteP.filter(p => contiene(p, km));
+      if (!princ.length) princ = tutteP;   // nessuna pagina copre il km (pagina mancante nel database): tutte, come prima
+      for (const [chiave, sel] of [["fianc", [...princ, ...rr.filter(p => p.tipo === "fiancata_linea")]], ["schema", rr.filter(p => p.tipo === "schema")]]) {
+        sel.sort(ordPag);
+        const pag = sel.filter(cImg).map(p => ({ t: `${p.pag} ${DESCR[p.tipo]}`, img: p.img, src: db.src(p.fonte, p.pag) }));
+        if (!pag.length) continue;
+        for (const p of sel) usa(p.fonte);
+        const firma = `${L.linea_id}|${s}|${chiave}|` + pag.map(x => x.img).join("|");
+        let k = gruppiPag[firma];
+        if (!k) {
+          const base = `${L.linea_id}_${s}_${chiave}`;
+          k = has(FLPAG, base) ? `${base}_${Object.keys(FLPAG).filter(x => x === base || x.startsWith(base + "_")).length + 1}` : base;
+          gruppiPag[firma] = k;
           const tit = chiave === "fianc" ? "fiancate" : "schema unifilare";
           FLPAG[k] = { titolo: `${SEG[t.lettera].fl} – ${L.nome_breve}, senso ${s} – ${tit}`, pag };
         }
-        if (has(FLPAG, k)) (FLLOC[o.id] = FLLOC[o.id] || {})[chiave] = k;
+        (FLLOC[o.id] = FLLOC[o.id] || {})[chiave] = k;
       }
-      if (!["fianc", "schema"].some(c => has(FLPAG, `${L.linea_id}_${s}_${c}`)) && !senza.includes(L.nome_breve)) senza.push(L.nome_breve);
+      if (!FLLOC[o.id] && !senza.includes(L.nome_breve)) senza.push(L.nome_breve);
     }
     if (senza.length)
       aperti.push({ cosa: "Pagine FL del fumetto (fiancata principale e schema unifilare): " + senza.join(", "), motivo: "da_studiare",

@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.40 — versione unica
+# ADC COPILOT 1.0.42 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,19 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.42 (05/11/2026) – pagine principali per località su tutti i FL
+
+Il database ha ora l'intervallo km di ogni pagina principale per tutti i FL caricati, quindi il filtro della 1.0.41 vale ovunque. Nuova regola di sicurezza in `motore/genera.js`: se il km di una località non cade in nessuna pagina (pagina non caricata nel database), il fumetto mostra tutte le principali della linea come prima, invece di nessuna.
+
+## 1.0.41 (05/11/2026) – fiancate principali solo della pagina della località
+
+Prima, toccando una località, il fumetto mostrava **tutte** le fiancate principali della linea (es. Torino – Novara storica: p.60–67). Ora il generatore (`motore/genera.js`) sceglie per ogni località solo le pagine principali la cui progressiva `km_da`–`km_a` (tabella `pagine_fl` del database) contiene il km della località:
+- una coppia sinistro/destro di norma; due coppie se la località è al confine tra due pagine (es. Chivasso, ultima riga di p.60 e prima di p.62);
+- una pagina senza km nel database si mostra sempre (nessuna pagina va persa); le fiancate di linea e lo schema unifilare restano per linea e senso;
+- le località con le stesse pagine condividono lo stesso gruppo in `FLPAG` (chiavi `<linea>_<senso>_fianc`, `_fianc_2`, …).
+
+**Serve rigenerare il viaggio** (i viaggi già salvati tengono le pagine con cui sono stati creati).
 
 ## 1.0.40 (04/11/2026) – riconoscimento delle località con la sola traccia
 
