@@ -105,6 +105,28 @@ test("pagine FL: gruppi solo con le immagini presenti nel telefono (1.0.21)", ()
   assert.equal(controlla(JSON.parse(JSON.stringify(p))).length, 0);
 });
 
+test("pagine FL: per ogni località solo le fiancate principali della sua pagina (1.0.41)", () => {
+  const lid = T.linee[0].linea_id, Tr = LT.leggi(TRACCIA), c = Co.componi(T, Tr, null);
+  const s = Object.values(G.genera(T, c.viaggio).condotta.SEG)[0];
+  const senso = /senso (\w+)\)/.exec(s.nome)[1];
+  const f = T.fonti[0].fonte_id;
+  const T2 = { ...T, pagine_fl: [
+    { fonte: f, pag: "p.2", pag_pdf: 2, tipo: "fiancata_linea", linea_id: lid, senso, km_da: 0, km_a: 10, img: "img/fl99_p2_fiancata_linea_x.jpg" },
+    { fonte: f, pag: "p.3", pag_pdf: 3, tipo: "principale_sx", linea_id: lid, senso, km_da: 0, km_a: 5, img: "img/fl99_p3_principale_sx_x.jpg" },
+    { fonte: f, pag: "p.4", pag_pdf: 4, tipo: "principale_dx", linea_id: lid, senso, km_da: 0, km_a: 5, img: "img/fl99_p4_principale_dx_x.jpg" },
+    { fonte: f, pag: "p.5", pag_pdf: 5, tipo: "principale_sx", linea_id: lid, senso, km_da: 5, km_a: 10, img: "img/fl99_p5_principale_sx_x.jpg" },
+    { fonte: f, pag: "p.6", pag_pdf: 6, tipo: "principale_dx", linea_id: lid, senso, km_da: 5, km_a: 10, img: "img/fl99_p6_principale_dx_x.jpg" },
+    { fonte: f, pag: "p.7", pag_pdf: 7, tipo: "principale", linea_id: lid, senso, km_da: null, km_a: null, img: "img/fl99_p7_principale_x.jpg" }] };
+  const p = G.genera(T2, c.viaggio, undefined, new Set(T2.pagine_fl.map(r => r.img)));
+  const pag = id => p.condotta.FLPAG[p.condotta.FLLOC[id].fianc].pag.map(x => x.t.split(" ")[0]);
+  // Alfa km 0: pagine 0–5 e quella senza km (sempre mostrata), poi la fiancata di linea; Beta km 10: pagine 5–10
+  assert.deepEqual(pag("alfa"), ["p.3", "p.4", "p.7", "p.2"]);
+  assert.deepEqual(pag("beta"), ["p.5", "p.6", "p.7", "p.2"]);
+  assert.notEqual(p.condotta.FLLOC.alfa.fianc, p.condotta.FLLOC.beta.fianc);
+  assert.equal(p.condotta.FLLOC.alfa.schema, undefined);
+  assert.equal(controlla(JSON.parse(JSON.stringify(p))).length, 0);
+});
+
 test("sola traccia: nome uguale vince sul prefisso e vince il nome più simile (1.0.40)", () => {
   assert.equal(Co.simile("TORINO STURA", "Torino Stura"), 1);
   assert.equal(Co.simile("TORINO STURA", "TORINO STURA ORIGINE AV"), 0.95);
