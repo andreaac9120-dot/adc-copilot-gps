@@ -368,7 +368,9 @@
     for (const o of occ) {
       const t = o.out || o.inn, L = t.linea, s = t.senso, km = kmSu(t, o.loc);
       const rr = T.pagine_fl.filter(p => p.linea_id === L.linea_id && (p.senso === s || p.senso === "entrambi") && p.img !== null && p.img !== undefined);
-      const princ = rr.filter(p => /^principale/.test(p.tipo) && contiene(p, km));
+      const tutteP = rr.filter(p => /^principale/.test(p.tipo));
+      let princ = tutteP.filter(p => contiene(p, km));
+      if (!princ.length) princ = tutteP;   // nessuna pagina copre il km (pagina mancante nel database): tutte, come prima
       for (const [chiave, sel] of [["fianc", [...princ, ...rr.filter(p => p.tipo === "fiancata_linea")]], ["schema", rr.filter(p => p.tipo === "schema")]]) {
         sel.sort(ordPag);
         const pag = sel.filter(cImg).map(p => ({ t: `${p.pag} ${DESCR[p.tipo]}`, img: p.img, src: db.src(p.fonte, p.pag) }));
