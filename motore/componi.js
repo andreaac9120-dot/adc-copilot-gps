@@ -3,6 +3,8 @@
 // Regole: confronto traccia ⇆ Scheda per nome; località della Scheda riconosciuta solo se progressiva (± 2 m)
 // e nome coincidono; itinerario = sequenze di località sulla stessa linea (la linea che prosegue più a lungo);
 // nessuna linea indovinata; colonna delle Sigle con stessa velocità e rango e percentuale non superiore.
+// 1.0.43: l'indicatore di partenza della Scheda sceglie la linea (tabella indicatori); progressiva diversa
+// dal database accettata solo se una discrepanza aperta della linea riporta le due progressive (RICOSTRUITA).
 (function (root) {
   "use strict";
   const C = typeof module !== "undefined" && module.exports ? require("./comune.js") : root.MotoreComune;
@@ -165,6 +167,10 @@
 
     // riconoscimento nel database
     const sequenza = [], puntiScheda = [];
+    const lineaPer = new Map((T.linee || []).map(l => [l.linea_id, l]));
+    const lineeDisc = new Map();   // linea → discrepanze aperte (1.0.43)
+    for (const d of (T.discrepanze || []))
+      if (d.linea_id && /^aperta/i.test(d.stato || "")) lineeDisc.set(d.linea_id, (lineeDisc.get(d.linea_id) || []).concat({ disc_id: d.disc_id, testo: d.testo || "" }));
     if (S) {
       let ultima = null;
       for (const r of S.righe) {
@@ -183,6 +189,32 @@
           const smax = Math.max(...cand.map(c => c[3]));
           const tenuti = cand.filter(c => c[3] >= smax - 1e-9).map(c => c.slice(0, 3));
           cand.length = 0; cand.push(...tenuti);
+        }
+        // 1.0.43: progressiva della Scheda diversa da quella del database su una linea con DISCREPANZA APERTA
+        // (es. D_NO_BOSCH_KM: Scheda e FL 22 Novara 0,170 – Novara Boschetto 0,495, database dal FL 13 0,090 – 0,430).
+        // Solo località, nome quasi uguale (≥ 0,9), scarto ≤ 100 m, linee senza riscontro esatto: tratto RICOSTRUITO.
+        if (r.tipo === "loc") {
+          const lineeEsatte = new Set(cand.map(c => c[1]));
+          const approx = [];
+          for (const p of punti) {
+            if (lineeEsatte.has(p.linea_id) || !lineeDisc.has(p.linea_id)) continue;
+            const vicini = r.km.filter(k => Math.abs(p.km - parseFloat(k)) > 0.002 + 1e-9 && Math.abs(p.km - parseFloat(k)) <= 0.1 + 1e-9);
+            // la discrepanza deve riportare entrambe le progressive (database e Scheda), es. «0,430» e «0,495»
+            const virg = k => parseFloat(k).toFixed(3).replace(".", ",");
+            const disc = (lineeDisc.get(p.linea_id) || []).filter(d => d.testo.includes(virg(p.km)) && vicini.some(k => d.testo.includes(virg(k))));
+            if (!disc.length) continue;
+            const l = locPer.get(p.loc_id);
+            const sim = Math.max(...nomiDb(l).map(n => simile(r.nome, n)));
+            if (sim >= 0.9 && (!cand.length || cand.some(c => c[0] === p.loc_id))) approx.push([p.loc_id, p.linea_id, p.km, sim, disc.map(d => d.disc_id)]);
+          }
+          if (approx.length) {
+            const smax = Math.max(...approx.map(c => c[3]));
+            for (const c of approx.filter(c => c[3] >= smax - 1e-9)) {
+              cand.push([c[0], c[1], c[2], true]);
+              R.push(`  ~ ${r.nome} (km ${r.km.join("/")}) = ${locPer.get(c[0]).nome} km ${C.fg(c[2])} della linea ${c[1]}: progressiva diversa, ` +
+                `discrepanza aperta ${c[4].join(", ")}: RICOSTRUITA, da confermare sul FL`);
+            }
+          }
         }
         if (r.tipo === "loc" || cand.length) {
           sequenza.push({ riga: r, cand });
@@ -231,9 +263,32 @@
         }
         corse.set(linea, j);
       }
-      const migliore = Math.max(...corse.values());
+      let migliore = Math.max(...corse.values());
       let scelte = [...corse].filter(([, j]) => j === migliore).map(([l]) => l);
       if (migliore === i) { i++; continue; }
+      // 1.0.43: indicatore di partenza stampato nella Scheda (colonna Simbologia) + tabella «indicatori» del database
+      // (località, senso, cifra → linea): se porta a una sola delle linee che proseguono, vale quella.
+      // Es. 41501: Pioltello Limito indicatore 2 in dispari = linea VE AV/AC verso Melzo Scalo (FL 29 p.62).
+      const ind = S && sequenza[i].riga.simb ? String(sequenza[i].riga.simb).trim() : "";
+      if (ind) {
+        const daInd = [...corse].filter(([l, j]) => {
+          if (j <= i) return false;
+          const li = lineaPer.get(l);
+          if (!li || !li.senso_pari) return false;
+          const cresce = su(i + 1, l)[2] > su(i, l)[2];
+          const senso = cresce === (li.senso_pari === "crescente") ? "pari" : "dispari";
+          // tutte le righe con questa località, senso e cifra devono portare alla stessa linea (es. Mi Lambrate pari 3
+          // vale per la linea Venezia «dalla Cintura» ma per Mi Greco P. «arrivi dalla VE DD»: ambiguo, non si usa)
+          const righe = (T.indicatori || []).filter(x => x.loc_id === su(i, l)[0] && x.senso === senso &&
+            String(x.cifra).trim() === ind && x.st !== "N");
+          return righe.length > 0 && righe.every(x => x.verso_linea === l);
+        }).map(([l]) => l);
+        if (daInd.length === 1) {
+          if (scelte.length !== 1 || scelte[0] !== daInd[0])
+            R.push(`  ${sequenza[i].riga.nome}: linea ${daInd[0]} scelta dall'indicatore di partenza ${ind} della Scheda (tabella indicatori del database)`);
+          scelte = daInd; migliore = corse.get(daInd[0]);
+        }
+      }
       if (scelte.length > 1 && S) {
         // progressive doppie della Scheda (es. «ALESSANDRIA SM 1,229 1,406»): la prima è della linea di arrivo,
         // l'ultima di quella di partenza → a parità di località si sceglie la linea coerente con queste

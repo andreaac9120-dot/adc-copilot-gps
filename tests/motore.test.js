@@ -138,3 +138,48 @@ test("sola traccia: nome uguale vince sul prefisso e vince il nome più simile (
   assert.equal(c.viaggio.itinerario.length, 1);
   assert.equal(c.viaggio.itinerario[0].da, "alfa");
 });
+
+// 1.0.43: Scheda 41501 e 38104 del 07/11/2026 (ITINERARIO PARZIALE a Pioltello Limito e a Novara Boschetto)
+const T5 = { ...T,
+  linee: [...T.linee,
+    { linea_id: "LL", nome: "Lenta", nome_breve: "Lenta", fonte: "FLX", senso_pari: "decrescente", st: "V" },
+    { linea_id: "AV", nome: "Veloce", nome_breve: "Veloce", fonte: "FLX", senso_pari: "decrescente", st: "V" },
+    { linea_id: "BO", nome: "Beta – Omega", nome_breve: "Beta – Omega", fonte: "FLX", senso_pari: "decrescente", st: "V" }],
+  localita: [...T.localita, { loc_id: "gamma", nome: "Gamma Scalo", tipo: "scalo", alias: null }, { loc_id: "omega", nome: "Omega Scalo", tipo: "scalo", alias: null }],
+  punti_linea: [...T.punti_linea,
+    { linea_id: "LL", loc_id: "beta", km: 10, km_txt: "10,000", fonte: "FLX", pag: "1", st: "V" },
+    { linea_id: "LL", loc_id: "gamma", km: 16, km_txt: "16,000", fonte: "FLX", pag: "1", st: "V" },
+    { linea_id: "AV", loc_id: "beta", km: 10, km_txt: "10,000", fonte: "FLX", pag: "1", st: "V" },
+    { linea_id: "AV", loc_id: "gamma", km: 16, km_txt: "16,000", fonte: "FLX", pag: "1", st: "V" },
+    { linea_id: "BO", loc_id: "beta", km: 0.09, km_txt: "0,090", fonte: "FLX", pag: "1", st: "V" },
+    { linea_id: "BO", loc_id: "omega", km: 0.43, km_txt: "0,430", fonte: "FLX", pag: "1", st: "V" }],
+  indicatori: [{ loc_id: "beta", senso: "dispari", segnale: "partenza", cifra: "1", verso_linea: "LL", dove: "", nota: null, fonte: "FLX", pag: "1", st: "V" },
+               { loc_id: "beta", senso: "dispari", segnale: "partenza", cifra: "2", verso_linea: "AV", dove: "", nota: null, fonte: "FLX", pag: "1", st: "V" }],
+  discrepanze: [{ disc_id: "D_BO", testo: "FL X: Beta 0,090 – Omega 0,430; FL Y: Beta 0,170 – Omega 0,495", fonti: "FLX", linea_id: "BO", stato: "aperta" }] };
+const SK = righe => ({ intestazione: { treno: "12345", valida_per: "03/11/2026", mezzo_sigla: "E494", sigla: "M100A", freno: "P75%", fl: [] },
+  pagine: [{ treno: "12345" }], controlli: [], moduli: [], righe });
+
+test("due linee alla pari: vale l'indicatore di partenza della Scheda (1.0.43)", () => {
+  const riga2 = simb => SK([{ nome: "Alfa", tipo: "loc", km: ["0.000"] }, { nome: "Beta", tipo: "loc", km: ["10.000"], simb },
+    { nome: "Gamma Scalo", tipo: "loc", km: ["16.000"] }]);
+  const a = Co.componi(T5, null, riga2("2"));
+  assert.ok(a.ok && a.viaggio.copertura.completa, a.rapporto.join("\n"));
+  assert.equal(a.viaggio.itinerario[1].linea, "AV");
+  assert.equal(Co.componi(T5, null, riga2("1")).viaggio.itinerario[1].linea, "LL");
+  // senza indicatore (o con una cifra che non porta a una sola linea) resta la scelta dell'utente
+  assert.equal(Co.componi(T5, null, riga2(undefined)).viaggio.copertura.completa, false);
+  assert.equal(Co.componi(T5, null, riga2("9")).viaggio.copertura.completa, false);
+});
+
+test("progressiva della Scheda diversa dal database: solo con discrepanza aperta che riporta le due progressive (1.0.43)", () => {
+  const S = SK([{ nome: "Alfa", tipo: "loc", km: ["0.000"] }, { nome: "Beta", tipo: "loc", km: ["10.000", "0.170"] },
+    { nome: "OMEGA SCAL", tipo: "loc", km: ["0.495"] }]);
+  const c = Co.componi(T5, null, S);
+  assert.ok(c.ok && c.viaggio.copertura.completa, c.rapporto.join("\n"));
+  assert.deepEqual(c.viaggio.itinerario.map(t => [t.da, t.a, t.linea]), [["alfa", "beta", "L1"], ["beta", "omega", "BO"]]);
+  assert.ok(c.rapporto.some(r => r.includes("D_BO") && r.includes("RICOSTRUITA")));
+  const p = G.genera(T5, c.viaggio, new Date("2026-11-03T08:00:00Z"));
+  assert.equal(controlla(JSON.parse(JSON.stringify(p))).length, 0);
+  // senza la discrepanza la località non si riconosce (nessuna tolleranza generica)
+  assert.equal(Co.componi({ ...T5, discrepanze: [] }, null, S).viaggio.copertura.completa, false);
+});

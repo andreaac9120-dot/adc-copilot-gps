@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.42 — versione unica
+# ADC COPILOT 1.0.43 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,14 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.43 (08/11/2026) – itinerario completo con le Scheda dei treni 41501 e 38104
+
+Correzione del compositore del viaggio (generatore senza IA), dalle Schede Treno del 07/11/2026 che davano «ITINERARIO PARZIALE»:
+- **41501 Domo II → Melzo Scalo**: a Pioltello Limito le linee VE AV/AC e VE LL arrivano entrambe a Melzo Scalo con le stesse progressive (12,310 → 18,750) e l'itinerario si fermava con «più linee possibili». Ora vale l'**indicatore di partenza stampato nella Scheda** (colonna Simbologia) letto nella tabella `indicatori` del database: Pioltello, senso dispari, cifra 2 = VE AV/AC verso Melzo Scalo (FL 29 p.62). L'indicatore si usa solo se tutte le righe del database con quella località, senso e cifra portano alla stessa linea (es. Mi Lambrate pari 3 è ambiguo e non si usa). Con la 38104 la stessa regola instrada Melzo Scalo → Pioltello sulla VE AV/AC (indicatore 1) e Pioltello → Mi Lambrate sulla VE DD (indicatore 2, come il «Cippo (VE DD)» della Scheda), dove prima si prendeva la VE LL.
+- **38104 Melzo Scalo → Novara Boschetto**: la Scheda stampa le progressive del FL 22 (Novara 0,170 – Novara Boschetto 0,495), il database quelle del FL 13 (0,090 – 0,430): discrepanza aperta D_NO_BOSCH_KM. Il riconoscimento chiede ± 2 m e Novara Boschetto restava «non nel database». Ora una località con nome quasi uguale e scarto ≤ 100 m è riconosciuta **solo** se una discrepanza aperta della linea riporta entrambe le progressive; il rapporto la segnala come RICOSTRUITA. Nessuna tolleranza generica.
+
+Stesse correzioni in `lettori/componi_viaggio.py` del database dati di linea. Non serve un database nuovo. **Serve rigenerare il viaggio.**
 
 ## 1.0.42 (05/11/2026) – pagine principali per località su tutti i FL
 
