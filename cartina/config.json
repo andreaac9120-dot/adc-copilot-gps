@@ -1,0 +1,21 @@
+{
+  "_leggimi": "Configurazione della cartina (1.0.44). Si può modificare a mano. Le località sono indicate con il loc_id del database. Importanti si calcolano dai dati: almeno 3 linee che vi passano, oppure stazione con almeno 2 linee. 'sempre' le rende importanti anche se non passano il criterio (l'ordine delle etichette resta per numero di linee); 'mai' toglie l'etichetta. Un loc_id che non c'è nel database si ignora.",
+  "localita": {
+    "sempre": ["luino", "la_spezia_c", "modane", "brennero", "tirano", "fortezza", "mantova", "modena", "padova", "reggio_emilia", "trento", "lodi"],
+    "mai": []
+  },
+  "_colori": "Un colore per compartimento (gruppo di linee), per tema. Un compartimento nuovo non elencato prende il primo colore libero di 'riserva'.",
+  "colori": {
+    "chiaro": { "MI": "#0063a6", "TO": "#c2410c", "BO": "#0f7a4f", "GE": "#a3367c", "VR": "#8a5a00", "VE": "#0e7490", "FNM": "#6d4c2f", "TS": "#5b3fa0" },
+    "scuro":  { "MI": "#5fb0ff", "TO": "#ff8a4c", "BO": "#3fd08e", "GE": "#f07ac4", "VR": "#f2b84b", "VE": "#3fd3e6", "FNM": "#d0a47a", "TS": "#b59cff" },
+    "riserva": {
+      "chiaro": ["#4d7c0f", "#be123c", "#1d4ed8", "#9a3412", "#0f766e", "#7e22ce"],
+      "scuro":  ["#a3e635", "#fb7185", "#93c5fd", "#fdba74", "#5eead4", "#d8b4fe"]
+    }
+  },
+  "etichette": {
+    "_leggimi": "Scala in pixel per grado di longitudine oltre la quale compaiono le altre stazioni (livello 1) e tutte le località (livello 2).",
+    "scala_livello_1": 260,
+    "scala_livello_2": 900
+  }
+}
