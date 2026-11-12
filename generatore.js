@@ -22,13 +22,13 @@ async function genInfo() {
   const n = i && i.conteggi && typeof i.conteggi === "object" ? i.conteggi : {};   // F15: informazioni incomplete non bloccano la Home
   el.innerHTML = i
     ? `Database dati di linea <b>${esc(i.versione || "?")}</b> · ${esc(n.linee ?? "?")} linee, ${esc(n.localita ?? "?")} località · importato il ${esc(dataOra(i.importato))}`
-    : "Nessun database nel telefono: importa il file <b>.adcdb.json</b> che ti consegna Claude (non è pubblico).";
+    : "Nessun database nel telefono";
   const ei = $("#genImg"); if (!ei) return;
   let f = null; try { f = await DB.getConf("pagine_fl_info"); } catch (_) {}
   const v = Object.entries(f || {}).sort((a, b) => a[0].localeCompare(b[0]));
   ei.innerHTML = v.length
     ? `Pagine FL nel telefono: <b>${v.reduce((n, [, x]) => n + x.conteggio, 0)}</b> (${v.map(([k, x]) => `${esc(k.replace(/_.*/, ""))} ${esc(x.conteggio)}`).join(", ")})`
-    : "Nessuna pagina FL nel telefono: importa i file <b>.adcimg.json</b> (fiancate e schemi unifilari) per vederle nel fumetto.";
+    : "Nessuna pagina FL nel telefono";
 }
 
 // ---------- Pagine FL (1.0.21) ----------
@@ -132,12 +132,12 @@ async function genGenera(btn) {
   if (GEN.occupato) return;
   GEN.occupato = true;   // F07: blocco preso subito, prima di ogni attesa
   let T = null; try { T = await DB.getConf("adcdb"); } catch (_) {}
-  if (!T) { GEN.occupato = false; return toast("Prima aggiorna o importa il database: menu ⋮ → Database"); }
+  if (!T) { GEN.occupato = false; return toast("Nessun database: menu ⋮ → Database"); }
   const testo = $("#gTraccia").value.trim();
   const f = $("#gScheda").files[0] || null;
   const locoUtente = $("#gLoco").value.trim();
-  if (!testo && !f) { GEN.occupato = false; $("#gTraccia").focus(); return toast("Serve la traccia Softrail o la Scheda Treno"); }
-  if (locoUtente && !Componi.tipoLoco(locoUtente)) { GEN.occupato = false; $("#gLoco").focus(); return toast("Locomotiva non riconosciuta: scrivi ad es. E494 o E494.504"); }
+  if (!testo && !f) { GEN.occupato = false; $("#gScheda").focus(); return toast("Serve la Scheda Treno (o la traccia Softrail in Altre opzioni)"); }
+  if (locoUtente && !Componi.tipoLoco(locoUtente)) { GEN.occupato = false; { const d = $(".g-altre"); if (d) d.open = true; } $("#gLoco").focus(); return toast("Locomotiva non riconosciuta: scrivi ad es. E494 o E494.504"); }
   const etichetta = btn.innerHTML; btn.disabled = true; btn.textContent = f ? "Lettura della Scheda Treno…" : "Generazione…";
   try {
     const Tr = testo ? LeggiTraccia.leggi(testo) : null;
@@ -260,7 +260,7 @@ async function genLista() {
       <button class="del" type="button" data-gen="elimina" data-id="${esc(id)}" aria-label="Elimina ${esc(I.treno)}">Elimina</button></div>`;
     } catch (_) { return rotto; }
   };
-  el.innerHTML = V.length ? V.map(voce).join("") : `<div class="note">Nessun viaggio senza IA salvato. Genera un pacchetto qui sopra e tocca «Salva nei viaggi senza IA».</div>`;
+  el.innerHTML = V.length ? V.map(voce).join("") : `<div class="empty">Nessuno</div>`;
 }
 async function apriSI(id) {
   const t = navNuova();   // F13
@@ -279,7 +279,7 @@ async function mostraSI(p, t = navNuova()) {
   revoca(imgURLs); imgURLs = urls;
   try { Scheda.show(p, imgURLs); } catch (err) { toast("Scheda non visualizzabile: " + testoErrore(err)); return false; }
   $("#vNota").textContent = "SENZA IA · " + $("#vNota").textContent;
-  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#dbV").hidden = true; $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
+  if (typeof Cartina !== "undefined") Cartina.nascondi(); vista("#viaggio"); scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
   return true;
 }
@@ -431,7 +431,7 @@ async function syncStato() {
   const nuove = !!(c.token && c.novita && c.novita.length);
   document.querySelectorAll(".screen-more, [data-options-db]").forEach(e => e.classList.toggle("notifica", nuove));
   b.classList.remove("sync-red", "sync-ok");
-  if (!c.token) { b.firstChild.textContent = "Aggiorna database"; info.textContent = "Non collegato al repository: tocca «Collegamento»"; }
+  if (!c.token) { b.firstChild.textContent = "Aggiorna database"; info.textContent = "Non collegato al repository"; }
   else if (c.novita && c.novita.length) {
     b.classList.add("sync-red");
     b.firstChild.textContent = `Aggiorna database (${c.novita.length})`;

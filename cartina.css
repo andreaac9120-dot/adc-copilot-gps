@@ -1,14 +1,21 @@
 /* Cartina delle linee e scheda riepilogativa (1.0.44). Usa solo i colori del tema dell'app (style.css). */
 
 /* ---------- Riquadri della home ---------- */
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.tile { display: flex; align-items: center; gap: 12px; text-align: left; min-height: 64px; padding: 12px 14px; border-radius: 14px;
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tile { display: grid; justify-items: center; align-content: center; gap: 10px; min-height: 132px; padding: 16px 10px; border-radius: 16px;
   border: 1.5px solid var(--line-border); background: var(--paper); color: var(--line); box-shadow: var(--card-shadow); cursor: pointer;
-  font-family: var(--f-body); }
-.tile svg { width: 40px; height: 40px; flex-shrink: 0; color: var(--line); }
-.tile b { display: block; font-size: 1.05rem; color: var(--ink); }
-.tile small { display: block; font-size: 0.82rem; color: var(--muted); font-weight: 500; }
+  font-family: var(--f-body); text-align: center; }
+.tile svg { width: 56px; height: 56px; color: var(--line); }
+.tile b { font-size: 1.08rem; color: var(--ink); line-height: 1.25; }
 .tile:active { transform: scale(0.98); }
+.g-altre { border-top: 1px solid var(--rule); padding-top: 10px; }
+.g-altre summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; color: var(--line); }
+.g-altre[open] { display: grid; gap: 12px; }
+.guida details { border-bottom: 1px solid var(--rule); padding: 4px 0 10px; }
+.guida details:last-child { border-bottom: 0; }
+.guida summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; min-height: 48px; display: flex; align-items: center; }
+.guida p, .guida li { line-height: 1.6; margin: 6px 0; }
+.guida ul { padding-left: 20px; margin: 6px 0; }
 
 /* ---------- Cartina a schermo intero ---------- */
 .carta { position: fixed; inset: 0; z-index: 5; background: var(--bg); display: flex; flex-direction: column; gap: 0;

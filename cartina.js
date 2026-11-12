@@ -324,7 +324,7 @@ const Cartina = (() => {
   }
 
   // ---------- Apertura e navigazione ----------
-  function mostra(id) { for (const v of ["#home", "#viaggio", "#dbV", "#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = v !== id; } }
+  function mostra(id) { if (typeof vista === "function") return vista(id); for (const v of ["#home", "#viaggio", "#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = v !== id; } }
   function nascondi() {
     for (const v of ["#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = true; }
     liberaImmagini(); chiudiImg();
