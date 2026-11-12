@@ -44,11 +44,7 @@
     <section class="card" aria-labelledby="hGen">
       <div class="card-head"><h2 id="hGen">Nuovo viaggio senza IA</h2></div>
       <p class="note">Crea il pacchetto direttamente nel telefono, senza Claude e senza rete, con i dati di linea del database. Funziona solo sulle linee già caricate nel database. Per studiare una linea con l'IA chiedilo in chat a Claude (progetto ADC COPILOT, comando STUDIO LINEA CONDOTTA con la Scheda Treno).</p>
-      <p class="note">Database dati di linea: menu <b>⋮ → Database</b> (aggiorna, importa, collegamento).</p>
-      <div class="actions">
-        <label class="btn file-btn">Importa pagine FL<small>File .adcimg.json: fiancate e schemi unifilari per il fumetto</small><input type="file" id="fImg" accept=".json,.adcimg.json,application/json" multiple hidden></label>
-      </div>
-      <p class="note" id="genImg"></p>
+      <p class="note">Database dati di linea e pagine FL: menu <b>⋮ → Database</b> (aggiorna, importa, collegamento).</p>
       <label class="field"><span>Traccia (Softrail Info treno; facoltativa se scegli la Scheda Treno)</span>
         <textarea id="gTraccia" rows="5" placeholder="Incolla qui la notifica con le tratte tra località…"></textarea></label>
       <label class="field"><span>Scheda Treno (PDF Railmobile, facoltativa)</span>
@@ -123,6 +119,11 @@
         <button class="btn file-btn" type="button" data-gen="token">Collegamento<small>Token di sola lettura del repository</small></button>
       </div>
       <p class="note warn-note" id="syncAvv" hidden></p>
+      <h3 class="sub-h">Pagine FL</h3>
+      <p class="note" id="genImg"></p>
+      <div class="actions">
+        <label class="btn file-btn">Importa pagine FL<small>File .adcimg.json: fiancate e schemi unifilari per il fumetto</small><input type="file" id="fImg" accept=".json,.adcimg.json,application/json" multiple hidden></label>
+      </div>
     </section>
   </main>
 
