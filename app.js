@@ -1,6 +1,6 @@
 // ADC COPILOT – app: archivio viaggi e import dei pacchetti. Dalla 1.0.38 nessun invio di comandi a Claude:
 // lo studio con IA si chiede in chat (progetto ADC COPILOT); qui resta il generatore senza IA.
-const VERSION = "1.0.43";
+const VERSION = "1.0.44";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -465,12 +465,36 @@ const dataId = p => String(p && p.id || "").split("_")[1] || "";
 const NAV = { n: 0 };
 const navNuova = () => ++NAV.n;
 const revoca = urls => { for (const u of Object.values(urls)) URL.revokeObjectURL(u); };
+// 1.0.44: una pagina alla volta (home, viaggio, Genera viaggio, Database, Guida, cartina, scheda della linea)
+const VISTE = ["#home", "#viaggio", "#genV", "#dbV", "#guidaV", "#cartina", "#lineaV"];
+function vista(id) { for (const v of VISTE) { const e = $(v); if (e) e.hidden = v !== id; } }
+// Pagine semplici aperte dalla home o dal menu ⋮: Genera viaggio, Database, Guida
+function apriPagina(id, hash, push) {
+  navNuova();
+  if (typeof GPS !== "undefined") GPS.close();
+  closeSheet(); Scheda.popClose();
+  if (typeof Cartina !== "undefined") Cartina.nascondi();
+  vista(id); scrollTo(0, 0);
+  if (push && location.hash !== hash) history.pushState({ p: hash }, "", hash);
+}
+function apriDatabase(push = true) {
+  apriPagina("#dbV", "#database", push);
+  if (typeof genInfo === "function") genInfo();
+  if (typeof syncStato === "function") syncStato();
+}
+function apriGenera(push = true) { apriPagina("#genV", "#genera", push); aggiornaListe(); }
+function apriGuida(push = true) { apriPagina("#guidaV", "#guida", push); aggiornaListe(); }
 async function home() {
   navNuova();
   if (typeof GPS !== "undefined") GPS.close();
   closeSheet(); Scheda.popClose();
   for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
-  $("#viaggio").hidden = true; $("#home").hidden = false;
+  if (typeof Cartina !== "undefined") Cartina.nascondi();
+  vista("#home");
+  await aggiornaListe();
+}
+// Elenchi dei viaggi salvati (pagina Genera viaggio) e spazio usato (Guida)
+async function aggiornaListe() {
   let V = [];
   try { V = await DB.listViaggi(); } catch (err) { toast("Archivio non leggibile: " + testoErrore(err)); }
   V.sort((a, b) => dataId(b).localeCompare(dataId(a)) || String(a && a.id).localeCompare(String(b && b.id)));
@@ -481,7 +505,7 @@ async function home() {
     const I = p.intestazione;
     return `<div class="trip"><button class="item" type="button" data-open="${esc(id)}"><span><span class="tno">${esc(I.treno)}</span><br>${esc(I.percorso)}<br><small>${esc(I.data_viaggio)} · rev. ${esc(p.revisione)} · ${esc(p.comandi.map(c => c.replace("STUDIO LINEA ", "")).join(" + ").toLowerCase())}${p.aperti && p.aperti.length ? ` · ${p.aperti.length} da studiare` : ""}</small></span><small>apri ›</small></button>
       <button class="del" type="button" data-del="${esc(id)}" aria-label="Elimina ${esc(I.treno)}">Elimina</button></div>`;
-  }).join("") : `<div class="empty">Nessun viaggio di Claude salvato. Se chiedi uno studio in chat, alla fine Claude ti consegna il file <b>.adc.json</b>: scaricalo e toccalo con <b>Importa pacchetto</b>, oppure condividilo con questa app.</div>`;
+  }).join("") : `<div class="empty">Nessuno</div>`;
   if (typeof genLista === "function") genLista();
   try { const e = await navigator.storage.estimate(); $("#storeInfo").textContent = `Spazio usato nel telefono: ${(e.usage / 1048576).toFixed(1)} MB.`; } catch (_) {}
   await sospesi();
@@ -502,7 +526,7 @@ async function apri(id) {
   }
   revoca(imgURLs); imgURLs = urls;
   try { Scheda.show(p, imgURLs); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
-  $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
+  if (typeof Cartina !== "undefined") Cartina.nascondi(); vista("#viaggio"); scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
   if (location.hash !== "#v=" + id) history.pushState({ v: id }, "", "#v=" + id);
 }
@@ -534,6 +558,8 @@ document.addEventListener("click", e => {
   const d = t.dataset;
   if (d.gps && typeof GPS !== "undefined") return GPS.handle(d.gps);
   if (d.cmd === "theme") return toggleTheme();
+  if (d.cmd === "cartina" && typeof Cartina !== "undefined") return Cartina.apri();
+  if (d.cmd === "genera") return apriGenera();
   if (d.cmd === "home") return history.length > 1 && location.hash ? history.back() : home();
   if (d.open) return apri(d.open);
   if (d.del) return elimina(d.del);
@@ -554,7 +580,15 @@ document.addEventListener("visibilitychange", () => {
   if (typeof GPS !== "undefined") GPS.visibilityChanged();
 });
 addEventListener("online", net); addEventListener("offline", net);
-addEventListener("popstate", () => { const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/); m ? apri(decodeURIComponent(m[1])) : s ? apriSI(decodeURIComponent(s[1])) : home(); });
+addEventListener("popstate", () => {
+  const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/), l = location.hash.match(/^#linea=(.+)$/);
+  if (location.hash === "#database") return apriDatabase(false);   // 1.0.44
+  if (location.hash === "#genera") return apriGenera(false);
+  if (location.hash === "#guida") return apriGuida(false);
+  if (typeof Cartina !== "undefined" && location.hash === "#cartina") return Cartina.apri(false);
+  if (typeof Cartina !== "undefined" && l) return Cartina.apriLinea(decodeURIComponent(l[1]), false);
+  m ? apri(decodeURIComponent(m[1])) : s ? apriSI(decodeURIComponent(s[1])) : home();
+});
 
 // ---------- Offline e aggiornamenti (R01, R02) ----------
 // La nuova versione si scarica intera in sottofondo e si attiva solo quando tocchi "Aggiorna":
@@ -594,6 +628,12 @@ async function registraSW() {
   await home();
   if (new URLSearchParams(location.search).has("condivisi")) await importaCondivisi();
   const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/);
+  const l = location.hash.match(/^#linea=(.+)$/);
   if (m) apri(decodeURIComponent(m[1])); else if (s && typeof apriSI === "function") apriSI(decodeURIComponent(s[1]));
+  else if (location.hash === "#database") apriDatabase(false);
+  else if (location.hash === "#genera") apriGenera(false);
+  else if (location.hash === "#guida") apriGuida(false);
+  else if (typeof Cartina !== "undefined" && location.hash === "#cartina") Cartina.apri(false);
+  else if (typeof Cartina !== "undefined" && l) Cartina.apriLinea(decodeURIComponent(l[1]), false);
 })();
 

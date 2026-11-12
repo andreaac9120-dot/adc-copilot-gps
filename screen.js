@@ -20,7 +20,7 @@
   let opener;
   const menu=document.createElement('dialog');
   menu.id='app-options';menu.className='app-options';menu.setAttribute('aria-labelledby','options-title');
-  menu.innerHTML='<div class="screen-heading"><h2 id="options-title">Menu</h2><button type="button" class="close" data-options-close aria-label="Chiudi menu">Chiudi</button></div><nav aria-label="Impostazioni"><ul class="options-list"><li><button type="button" class="options-item" data-options-screen><span>Schermo</span><span aria-hidden="true">›</span></button></li></ul></nav>';
+  menu.innerHTML='<div class="screen-heading"><h2 id="options-title">Menu</h2><button type="button" class="close" data-options-close aria-label="Chiudi menu">Chiudi</button></div><nav aria-label="Impostazioni"><ul class="options-list"><li><button type="button" class="options-item" data-options-db><span>Database<span class="notifica-testo"> · aggiornamento disponibile</span></span><span aria-hidden="true">›</span></button></li><li><button type="button" class="options-item" data-options-guida><span>Guida</span><span aria-hidden="true">›</span></button></li><li><button type="button" class="options-item" data-options-screen><span>Schermo</span><span aria-hidden="true">›</span></button></li></ul></nav>';
   document.body.append(menu);
   document.querySelectorAll('header.head .tools:not(#vLoco)').forEach(tools=>{
     const button=document.createElement('button'); button.type='button';button.className='chip screen-more';button.textContent='⋮';button.setAttribute('aria-label','Apri menu');button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
@@ -33,6 +33,8 @@
   });
   menu.querySelector('[data-options-close]').addEventListener('click',()=>menu.close());
   menu.querySelector('[data-options-screen]').addEventListener('click',()=>{menu.close();dialog.showModal();});
+  menu.querySelector('[data-options-db]').addEventListener('click',()=>{menu.close();if(typeof apriDatabase==='function')apriDatabase();});
+  menu.querySelector('[data-options-guida]').addEventListener('click',()=>{menu.close();if(typeof apriGuida==='function')apriGuida();});
   menu.addEventListener('close',()=>{opener?.setAttribute('aria-expanded','false');if(!dialog.open)opener?.focus();});
   menu.addEventListener('click',e=>{if(e.target===menu){const r=menu.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)menu.close();}});
   dialog.querySelector('[data-screen-close]').addEventListener('click',()=>dialog.close());

@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.43 — versione unica
+# ADC COPILOT 1.0.44 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,18 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.44 (12/11/2026) – cartina delle linee del database
+
+Nuovo riquadro **Cartina** nella home: tutte le linee del database disegnate su uno sfondo dell'Italia, offline, e al tocco su una linea la **scheda riepilogativa** con i dati del database. Il formato del pacchetto `.adc.json` (schema 1.0.4) non cambia.
+
+- **Solo dati del database.** Coordinate solo dalla tabella `geo` con stato V (niente geocoding, niente stime). La linea unisce con segmenti diritti, in ordine di progressiva, le località che hanno coordinate: è uno schema di orientamento, non il tracciato reale. Se fra due località con coordinate ce n'è una senza, il tratto è **tratteggiato** (collegamento indicativo); così anche fra due linee che si continuano in un punto senza coordinate (es. il cippo di un cambio di progressiva), con un tratto fra la località con coordinate più vicina di ciascuna. Le linee con meno di due località con coordinate non si disegnano ma stanno nel pannello **Elenco linee → Linee senza coordinate sufficienti**, da cui si apre comunque la scheda.
+- **Leggibilità.** Un colore per compartimento (tavolozza per tema chiaro e scuro in `cartina/config.json`), legenda richiudibile, linee con stato R/I/N con una riga chiara al centro, linee sullo stesso tratto o affiancate (Sez. 4.6) leggermente scostate. Fascia di tocco di 28 px; se nel punto toccato passano più linee, l'app chiede quale. Pizzico, trascinamento, doppio tocco, tasti +, − e ricentra.
+- **Località importanti** calcolate dai dati: almeno 3 linee, oppure stazione con almeno 2 linee. Elenco di eccezioni (`sempre`, `mai`) in `cartina/config.json`. Le etichette compaiono per priorità senza sovrapporsi; più zoom = più località.
+- **Scheda della linea** in sezioni richiudibili, con barra di completezza: intestazione (senza la voce ETCS L2 obbligatorio), sistema di esercizio, località, grado di prestazione per tratto e per senso (colonna `gdp`; ascesa esclusa), indicatori di direzione (tocco sulla linea di destinazione), circolabilità delle locomotive (DE CTI 10/2016: ammessa, con limitazione, esclusa, da studiare; tabella «tutte le locomotive»), linee affiancate con copertura della Sez. 4.6, utenze, pagine FL in immagine (con pizzico), discrepanze aperte. Ogni riga ha stato V/R/I/N e, al tocco, fonte e pagina. Ciò che manca è «da studiare». Valori diversi nello stesso punto (es. due gradi di prestazione) si mostrano, non si risolvono.
+- **Home essenziale.** Solo intestazione e due riquadri: **Cartina** e **Genera viaggio**. Il generatore (Scheda Treno; traccia e locomotiva in «Altre opzioni») e i viaggi salvati (generati e da Claude) stanno nella pagina Genera viaggio. Le spiegazioni sono nella nuova **Guida** (menu ⋮), con versione dell'app, stato offline e spazio usato. «Importa pacchetto» (file .adc.json di Claude) è nella pagina Database.
+- **Menu ⋮ → Database.** Pagina che raccoglie, tolti dalla home, «Aggiorna database» (prima «Aggiorna dati»), «Importa database», «Collegamento» e «Importa pagine FL», con la versione dei dati nel telefono. Quando il controllo trova novità nel repository compare un pallino rosso sui tre puntini del menu e sulla voce Database.
+- **Architettura.** Modello dati in `motore/cartina_modello.js` (nessuna interfaccia, provato da `tests/cartina.test.js`), gemello Python identico in `strumenti/cartina_modello.py` (il test confronta i due; con `ADC_DB=<file .adcdb.json>` anche sul database vero). Vista in `cartina.js` e `cartina.css` (canvas scritto a mano, nessuna libreria). Contorno da Natural Earth 1:10m (pubblico dominio), semplificato con `strumenti/contorno_italia.py` in `cartina/contorno_italia.json` (61 KB). Il modello si ricostruisce solo quando cambia il database importato.
 
 ## 1.0.43 (08/11/2026) – itinerario completo con le Scheda dei treni 41501 e 38104
 
