@@ -9,7 +9,8 @@ const Cartina = (() => {
   const S = {
     conf: null, contorno: null, T: null, info: null, M: null, chiave: null, rip: new Map(),
     P: new Map(), linee: [], paesi: null, vis: [], sel: null, col: null, det: [], img: [], imgURL: [],
-    cv: null, ctx: null, W: 0, H: 0, dpr: 1, V: null, fitS: 1, raf: 0, montata: false, linea: null
+    cv: null, ctx: null, W: 0, H: 0, dpr: 1, V: null, fitS: 1, raf: 0, montata: false, linea: null,
+    pos: null, posWatch: null, posCentra: false
   };
   const KX = Math.cos(44.5 * RAD);
   const wx = lon => lon * KX, wy = lat => -lat;
@@ -214,6 +215,7 @@ const Cartina = (() => {
       ctx.setLineDash([w * 2.2, w * 1.8]); tracciaPath(ctx, l, p, "tratteggiato"); ctx.stroke(); ctx.setLineDash([]);
     }
     etichette(ctx, c, x0, y0, x1, y1);
+    disegnaPos(ctx);
   }
   // Località: punti e nomi per priorità, più zoom = più località, senza sovrapporsi
   function etichette(ctx, c, x0, y0, x1, y1) {
@@ -250,6 +252,67 @@ const Cartina = (() => {
         break;
       }
     }
+  }
+
+  // ---------- La mia posizione (GPS del telefono) ----------
+  // Solo in memoria finché la cartina è aperta: nessuna posizione viene salvata. Si spegne uscendo dalla cartina.
+  const BLU = "#1a73e8";
+  function disegnaPos(ctx) {
+    if (!S.pos) return;
+    const { s, tx, ty } = S.V, x = wx(S.pos.lon) * s + tx, y = wy(S.pos.lat) * s + ty;
+    const r = Math.max(0, S.pos.acc / 111320 * s);   // metri → gradi di latitudine → pixel
+    if (r > 9) {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
+      ctx.fillStyle = "rgba(26,115,232,.15)"; ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = "rgba(26,115,232,.55)"; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, 2 * Math.PI);
+    ctx.fillStyle = "#fff"; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, 2 * Math.PI);
+    ctx.fillStyle = BLU; ctx.fill();
+  }
+  function pulsantePos() {
+    const b = $("#cPos"); if (!b) return;
+    const on = S.posWatch !== null;
+    b.classList.toggle("on", on && !!S.pos);
+    b.classList.toggle("attesa", on && !S.pos);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  function centraPos() {
+    if (!S.pos || !S.V) return;
+    const s = Math.max(S.V.s, S.fitS * 12);   // abbastanza vicino da vedere le località attorno
+    S.V.s = s;
+    S.V.tx = S.W / 2 - wx(S.pos.lon) * s;
+    S.V.ty = S.H / 2 - wy(S.pos.lat) * s;
+    ridisegna();
+  }
+  function fermaPos() {
+    if (S.posWatch !== null && navigator.geolocation) { try { navigator.geolocation.clearWatch(S.posWatch); } catch (_) {} }
+    S.posWatch = null; S.pos = null; S.posCentra = false;
+    pulsantePos(); ridisegna();
+  }
+  function miaPosizione() {
+    if (S.posWatch !== null) {   // già attivo: ricentra sulla posizione
+      if (S.pos) centraPos(); else toast("Sto cercando la posizione…");
+      return;
+    }
+    if (!navigator.geolocation || !window.isSecureContext) return toast("Posizione non disponibile su questo dispositivo o browser");
+    S.posCentra = true;
+    try {
+      S.posWatch = navigator.geolocation.watchPosition(p => {
+        const c = p.coords;
+        S.pos = { lat: c.latitude, lon: c.longitude, acc: Number.isFinite(c.accuracy) ? c.accuracy : 0 };
+        if (S.posCentra) { S.posCentra = false; centraPos(); } else ridisegna();
+        pulsantePos();
+      }, e => {
+        const m = e && e.code === 1 ? "Permesso negato: abilita la Posizione per questa app nelle impostazioni del telefono/Chrome" :
+          e && e.code === 3 ? "Posizione non trovata in tempo: riprova all'aperto" : "Posizione non disponibile: controlla che il GPS sia acceso";
+        toast(m);
+        if (!S.pos || (e && e.code === 1)) fermaPos();
+      }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 });
+    } catch (_) { S.posWatch = null; toast("Posizione non disponibile"); }
+    pulsantePos();
+    if (S.posWatch !== null) toast("Cerco la tua posizione…");
   }
 
   // ---------- Tocco sulla cartina ----------
@@ -348,7 +411,7 @@ const Cartina = (() => {
   function mostra(id) { if (typeof vista === "function") return vista(id); for (const v of ["#home", "#viaggio", "#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = v !== id; } }
   function nascondi() {
     for (const v of ["#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = true; }
-    liberaImmagini(); chiudiImg();
+    liberaImmagini(); chiudiImg(); fermaPos();
   }
   async function apri(push = true) {
     const t = typeof navNuova === "function" ? navNuova() : 0;
@@ -590,6 +653,7 @@ const Cartina = (() => {
     if (d.cd !== undefined) return mostraDet(+d.cd);
     if (d.ci !== undefined) return apriImg(+d.ci);
     if (d.c === "centra") { ricentra(); return ridisegna(); }
+    if (d.c === "pos") return miaPosizione();
     if (d.c === "zin") return zoomA(S.W / 2, S.H / 2, 1.6);
     if (d.c === "zout") return zoomA(S.W / 2, S.H / 2, 1 / 1.6);
     if (d.c === "elenco") return S.M && elenco();

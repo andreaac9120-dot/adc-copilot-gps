@@ -150,7 +150,7 @@
           <li><b>Riga chiara al centro</b>: linea con stato R, I o N nel database.</li>
           <li>I segmenti sono diritti fra le località, in ordine di progressiva: è uno schema di orientamento, non il tracciato reale. Le linee sullo stesso tratto o affiancate sono leggermente scostate per poterle toccare separatamente.</li>
           <li>Pallini e nomi: nodi e stazioni principali, calcolati dal numero di linee che vi passano; avvicinando compaiono più località.</li>
-          <li>Pizzico o doppio tocco per ingrandire, trascina per spostare, ⌖ per ricentrare. Se nel punto toccato passano più linee, l'app chiede quale.</li>
+          <li>Pizzico o doppio tocco per ingrandire, trascina per spostare, ⤢ per la vista intera. ⌖ mostra la tua posizione (punto blu, con il cerchio di precisione) e ci centra la cartina; toccalo di nuovo per ricentrare. Il GPS della cartina si spegne quando esci dalla cartina e la posizione non viene salvata. Se nel punto toccato passano più linee, l'app chiede quale.</li>
           <li><b>Elenco linee</b>: ricerca per nome e linee senza coordinate sufficienti (non disegnate, ma con la scheda).</li>
           <li>La cartina si aggiorna da sola quando aggiorni il database.</li>
         </ul>
@@ -223,7 +223,8 @@
       <div class="carta-tools">
         <button class="cbtn" type="button" data-c="zin" aria-label="Ingrandisci">+</button>
         <button class="cbtn" type="button" data-c="zout" aria-label="Riduci">−</button>
-        <button class="cbtn" type="button" data-c="centra" aria-label="Ricentra la cartina">⌖</button>
+        <button class="cbtn" type="button" data-c="centra" aria-label="Vista intera dell'Italia" title="Vista intera">⤢</button>
+        <button class="cbtn c-pos" type="button" data-c="pos" id="cPos" aria-label="La mia posizione" aria-pressed="false" title="La mia posizione">⌖</button>
       </div>
       <button class="carta-elenco btn" type="button" data-c="elenco" id="cElenco" hidden>Elenco linee</button>
       <details class="carta-leg" id="cLeg">

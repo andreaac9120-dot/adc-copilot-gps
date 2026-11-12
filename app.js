@@ -1,6 +1,6 @@
 // ADC COPILOT – app: archivio viaggi e import dei pacchetti. Dalla 1.0.38 nessun invio di comandi a Claude:
 // lo studio con IA si chiede in chat (progetto ADC COPILOT); qui resta il generatore senza IA.
-const VERSION = "1.0.44";
+const VERSION = "1.0.45";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
