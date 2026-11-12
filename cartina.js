@@ -43,6 +43,9 @@ const Cartina = (() => {
       return Object.assign({}, l, { pts, wb: [wx(l.bbox[0]), wy(l.bbox[3]), wx(l.bbox[2]), wy(l.bbox[1])] });
     });
     S.perId = new Map(S.linee.map(l => [l.linea_id, l]));
+    S.tutte = new Map(S.M.senza_coordinate.concat(S.linee).map(l => [l.linea_id, l]));
+    // giunzioni senza coordinate (es. cippo di cambio di progressiva): collegamento tratteggiato fra due linee
+    S.coll = (S.M.collegamenti || []).filter(g => S.P.has(g.da) && S.P.has(g.a)).map(g => Object.assign({}, g, { pts: [S.P.get(g.da), S.P.get(g.a)] }));
     S.locPer = new Map(S.M.localita.map(l => [l.loc_id, l]));
     if (S.contorno && !S.paesi && typeof Path2D !== "undefined") {
       S.paesi = S.contorno.paesi.map(p => {
@@ -188,6 +191,18 @@ const Cartina = (() => {
       }
     }
     ctx.setLineDash([]);
+    // 2b) collegamenti fra due linee che si toccano in un punto senza coordinate: sempre tratteggiati
+    S.visColl = [];
+    for (const g of S.coll || []) {
+      const p = g.pts.map(([x, y]) => [x * s + tx, y * s + ty]);
+      S.visColl.push([g, p]);
+      const la = S.tutte.get(g.linee[0]) || { compartimento: null }, lb = S.tutte.get(g.linee[1]) || { compartimento: null };
+      const evid = g.linee.includes(S.sel);
+      ctx.setLineDash([w * 2.2, w * 1.8]);
+      ctx.strokeStyle = c.alone; ctx.lineWidth = w + 2.4; ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]); ctx.lineTo(p[1][0], p[1][1]); ctx.stroke();
+      ctx.strokeStyle = la.compartimento === lb.compartimento ? coloreLinea(la) : c.muted; ctx.lineWidth = evid ? w + 2.2 : w; ctx.stroke();
+      ctx.setLineDash([]);
+    }
     // 3) linea selezionata, sopra le altre
     const sel = S.vis.find(([l]) => l.linea_id === S.sel);
     if (sel) {
@@ -249,6 +264,12 @@ const Cartina = (() => {
       let d = Infinity;
       for (let k = 0; k < p.length - 1; k++) d = Math.min(d, distSeg(x, y, p[k], p[k + 1]));
       if (d <= TOCCO) hit.push([d, l]);
+    }
+    // un collegamento tra due linee le propone entrambe
+    for (const [g, p] of S.visColl || []) {
+      const d = distSeg(x, y, p[0], p[1]);
+      if (d > TOCCO) continue;
+      for (const id of g.linee) { const l = S.tutte.get(id); if (l && !hit.some(h => h[1] === l)) hit.push([d, l]); }
     }
     if (!hit.length) { if (S.sel) { S.sel = null; ridisegna(); } return; }
     hit.sort((a, b) => a[0] - b[0] || (a[1].linea_id < b[1].linea_id ? -1 : 1));

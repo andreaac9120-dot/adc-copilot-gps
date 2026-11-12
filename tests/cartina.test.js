@@ -80,6 +80,20 @@ function prova() {
     discrepanze: [{ disc_id: "D2", testo: "aperta", fonti: "F1", linea_id: "L_A", stato: "aperta" }, { disc_id: "D1", testo: "chiusa", fonti: "F1", linea_id: "L_A", stato: "chiusa" }]
   };
 }
+// Due linee che si continuano in un cippo senza coordinate (cambio di progressiva), più un bivio con tre linee
+function conGiunzione() {
+  const T = prova();
+  const p = (linea_id, loc_id, km) => ({ linea_id, loc_id, km, km_txt: String(km), posto: null, nota: null, ...s() });
+  const L = (linea_id) => ({ linea_id, nome: linea_id, nome_breve: linea_id, compartimento: "XX", binari: null, senso_pari: "crescente", alimentazione: null, etcs_l2_obbl: null, note: null, fonte: "F1", pag: null, st: "V" });
+  T.linee.push(L("L_E"), L("L_F"), L("L_G"), L("L_H"), L("L_K"));
+  T.localita.push({ loc_id: "e1", nome: "Epsilon", tipo: "stazione" }, { loc_id: "e2", nome: "Fermata E", tipo: "fermata" }, { loc_id: "cip", nome: "Cippo 0/50", tipo: "punto" },
+    { loc_id: "f1", nome: "Effe", tipo: "stazione" }, { loc_id: "biv", nome: "Bivio Tre", tipo: "bivio" }, { loc_id: "g1", nome: "Gi", tipo: "stazione" }, { loc_id: "h1", nome: "Acca", tipo: "stazione" }, { loc_id: "k1", nome: "Kappa", tipo: "stazione" });
+  T.punti_linea.push(p("L_E", "e1", 0), p("L_E", "e2", 5), p("L_E", "cip", 9), p("L_F", "cip", 50), p("L_F", "f1", 52), p("L_F", "a1", 60),
+    p("L_G", "g1", 0), p("L_G", "biv", 3), p("L_H", "biv", 0), p("L_H", "h1", 4), p("L_K", "biv", 0), p("L_K", "k1", 2));
+  for (const [loc_id, lat, lon] of [["e1", 44.5, 8.5], ["f1", 44.7, 8.7], ["g1", 44.1, 8.1], ["h1", 44.2, 8.2], ["k1", 44.3, 8.3]])
+    T.geo.push({ loc_id, lat, lon, cod_rinf: null, src: "prova", st: "V" });
+  return T;
+}
 const VUOTO = () => Object.fromEntries(Object.keys(prova()).map(k => [k, []]));
 const sez = (R, id) => R.sezioni.find(x => x.id === id);
 
@@ -97,6 +111,14 @@ test("linee senza coordinate sufficienti: elencate, non sparite", () => {
   const m = M.costruisci(prova(), {});
   assert.deepEqual(m.senza_coordinate.map(l => [l.linea_id, l.motivo]), [["L_C", "una sola località con coordinate V"], ["L_D", "nessuna località nel database"]]);
   assert.equal(m.conteggi.linee, 4); assert.equal(m.conteggi.disegnate, 2);
+});
+test("due linee che si continuano in un punto senza coordinate: collegamento tratteggiato, mai con tre linee", () => {
+  const m = M.costruisci(conGiunzione(), {});
+  assert.deepEqual(m.collegamenti, [{ via: "cip", linee: ["L_E", "L_F"], da: "e1", a: "f1", tipo: "tratteggiato", senza_coord: ["e2", "cip"] }]);
+  assert.equal(m.conteggi.collegamenti, 1);
+  assert.equal(M.costruisci(prova(), {}).collegamenti.length, 0);
+  // la linea L_E (una sola località con coordinate) resta tra quelle non disegnate: il collegamento non la disegna
+  assert.ok(m.senza_coordinate.some(l => l.linea_id === "L_E"));
 });
 test("linee sullo stesso tratto: scostamenti diversi", () => {
   const m = M.costruisci(prova(), {});
@@ -184,7 +206,7 @@ function confronta(T, file) {
   for (const l of T.linee) assert.deepStrictEqual(M.riepilogo(T, l.linea_id), py.riepiloghi[l.linea_id], l.linea_id);
 }
 test("JavaScript e Python danno lo stesso risultato (dati di prova)", { skip: !haPython && "python3 non disponibile" }, () => {
-  for (const T of [prova(), VUOTO()]) {
+  for (const T of [prova(), conGiunzione(), VUOTO()]) {
     const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cartina-")), "db.json");
     fs.writeFileSync(f, JSON.stringify({ tabelle: T }));
     confronta(T, f);

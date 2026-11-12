@@ -140,6 +140,7 @@ def costruisci(T, conf=None):
         base.update({"sequenza": seq, "tratti": tratti, "bbox": [min(lon), min(lat), max(lon), max(lat)], "scostamento": 0})
         linee.append(base)
     assegna_scostamenti(I, linee)
+    collegamenti = giunzioni(I, linee_ord)
 
     localita = []
     for i, g in I["geoV"].items():
@@ -167,12 +168,43 @@ def costruisci(T, conf=None):
     if linee:
         bb = [min(l["bbox"][0] for l in linee), min(l["bbox"][1] for l in linee), max(l["bbox"][2] for l in linee), max(l["bbox"][3] for l in linee)]
     return {
-        "versione_modello": VERSIONE_MODELLO, "linee": linee, "senza_coordinate": senza, "localita": loc_ord,
+        "versione_modello": VERSIONE_MODELLO, "linee": linee, "senza_coordinate": senza, "collegamenti": collegamenti, "localita": loc_ord,
         "compartimenti": compartimenti, "bbox": bb,
         "conteggi": {"linee": len(linee_ord), "disegnate": len(linee), "senza_coordinate": len(senza), "localita_con_coordinate": len(localita),
                      "tratti_pieni": sum(1 for l in linee for t in l["tratti"] if t["tipo"] == "pieno"),
-                     "tratti_tratteggiati": sum(1 for l in linee for t in l["tratti"] if t["tipo"] == "tratteggiato")},
+                     "tratti_tratteggiati": sum(1 for l in linee for t in l["tratti"] if t["tipo"] == "tratteggiato"),
+                     "collegamenti": len(collegamenti)},
     }
+
+
+def giunzioni(I, linee_ord):
+    """Due linee che finiscono nello stesso punto senza coordinate V e lì si continuano: collegamento tratteggiato."""
+    capi = {}
+    for l in linee_ord:
+        ps = punti_ordinati(I, l["linea_id"])
+        if len(ps) < 2:
+            continue
+        for capo, verso in ((0, 1), (len(ps) - 1, -1)):
+            i = ps[capo]["loc_id"]
+            if i in I["geoV"]:
+                continue
+            k = capo + verso
+            saltate = []
+            while 0 <= k < len(ps) and ps[k]["loc_id"] not in I["geoV"]:
+                saltate.append(ps[k]["loc_id"])
+                k += verso
+            capi.setdefault(i, []).append({"linea": l["linea_id"], "vicina": ps[k]["loc_id"] if 0 <= k < len(ps) else None, "saltate": saltate})
+    out = []
+    for via in sorted(capi):
+        c = capi[via]
+        if len(c) != 2 or c[0]["linea"] == c[1]["linea"] or len(I["puntiLoc"].get(via, [])) != 2:
+            continue
+        if not c[0]["vicina"] or not c[1]["vicina"]:
+            continue
+        a, b = sorted(c, key=lambda x: x["linea"])
+        out.append({"via": via, "linee": [a["linea"], b["linea"]], "da": a["vicina"], "a": b["vicina"], "tipo": "tratteggiato",
+                    "senza_coord": list(reversed(a["saltate"])) + [via] + b["saltate"]})
+    return out
 
 
 def assegna_scostamenti(I, linee):

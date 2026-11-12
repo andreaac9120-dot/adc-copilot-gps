@@ -146,7 +146,7 @@
       <details><summary>Cartina</summary>
         <ul>
           <li>Un colore per compartimento (legenda in basso a sinistra).</li>
-          <li><b>Linea piena</b>: località con coordinate verificate (V). <b>Tratteggio</b>: collegamento indicativo, fra le due località ce n'è almeno una senza coordinate.</li>
+          <li><b>Linea piena</b>: località con coordinate verificate (V). <b>Tratteggio</b>: collegamento indicativo, fra le due località c'è almeno un punto senza coordinate. Unisce anche due linee che si continuano in un punto senza coordinate (es. il cippo di un cambio di progressiva): toccandolo si sceglie una delle due.</li>
           <li><b>Riga chiara al centro</b>: linea con stato R, I o N nel database.</li>
           <li>I segmenti sono diritti fra le località, in ordine di progressiva: è uno schema di orientamento, non il tracciato reale. Le linee sullo stesso tratto o affiancate sono leggermente scostate per poterle toccare separatamente.</li>
           <li>Pallini e nomi: nodi e stazioni principali, calcolati dal numero di linee che vi passano; avvicinando compaiono più località.</li>
@@ -231,7 +231,7 @@
         <ul class="c-leg-comp" id="cLegComp"></ul>
         <ul class="c-leg-tipi">
           <li><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>località con coordinate verificate (V)</li>
-          <li><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="currentColor" stroke-width="3.4" stroke-dasharray="6 5"/></svg>collegamento indicativo: località intermedie senza coordinate</li>
+          <li><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="currentColor" stroke-width="3.4" stroke-dasharray="6 5"/></svg>collegamento indicativo: punto senza coordinate in mezzo</li>
           <li><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M2 5h30" stroke="var(--paper)" stroke-width="1.2"/></svg>linea con stato R, I o N nel database</li>
           <li><svg viewBox="0 0 34 10"><circle cx="17" cy="5" r="3.6" fill="var(--paper)" stroke="currentColor" stroke-width="1.8"/></svg>località importante (nodo)</li>
         </ul>

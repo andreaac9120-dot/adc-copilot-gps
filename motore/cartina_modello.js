@@ -103,6 +103,7 @@
       linee.push(Object.assign(base, { sequenza, tratti, bbox: [Math.min(...lon), Math.min(...lat), Math.max(...lon), Math.max(...lat)], scostamento: 0 }));
     }
     assegnaScostamenti(I, linee);
+    const collegamenti = giunzioni(I, lineeOrd);
 
     // Località con coordinate V che stanno su almeno una linea: grado = numero di linee che vi passano
     const localita = [];
@@ -125,11 +126,42 @@
     const compartimenti = ordina([...nComp].map(([id, n]) => ({ id, n_linee: n })), c => [-c.n_linee, c.id]);
     const bb = linee.length ? [Math.min(...linee.map(l => l.bbox[0])), Math.min(...linee.map(l => l.bbox[1])), Math.max(...linee.map(l => l.bbox[2])), Math.max(...linee.map(l => l.bbox[3]))] : null;
     return {
-      versione_modello: VERSIONE_MODELLO, linee, senza_coordinate: senza, localita: locOrd, compartimenti, bbox: bb,
+      versione_modello: VERSIONE_MODELLO, linee, senza_coordinate: senza, collegamenti, localita: locOrd, compartimenti, bbox: bb,
       conteggi: { linee: lineeOrd.length, disegnate: linee.length, senza_coordinate: senza.length,
         localita_con_coordinate: localita.length, tratti_pieni: linee.reduce((s, l) => s + l.tratti.filter(t => t.tipo === "pieno").length, 0),
-        tratti_tratteggiati: linee.reduce((s, l) => s + l.tratti.filter(t => t.tipo === "tratteggiato").length, 0) }
+        tratti_tratteggiati: linee.reduce((s, l) => s + l.tratti.filter(t => t.tipo === "tratteggiato").length, 0),
+        collegamenti: collegamenti.length }
     };
+  }
+
+  // Giunzioni senza coordinate (1.0.44): due linee che finiscono nello stesso punto senza coordinate V (es. il cippo di
+  // un cambio di progressiva) e lì si continuano. Si collegano con un tratto TRATTEGGIATO (indicativo) fra la località
+  // con coordinate più vicina di ciascuna linea. Nessuna coordinata inventata; con 3 o più linee nel punto, niente.
+  function giunzioni(I, lineeOrd) {
+    const capi = new Map();   // loc senza coordinate → [{linea, vicina, saltate}]
+    for (const l of lineeOrd) {
+      const ps = puntiOrdinati(I, l.linea_id);
+      if (ps.length < 2) continue;
+      for (const [capo, verso] of [[0, 1], [ps.length - 1, -1]]) {
+        const id = ps[capo].loc_id;
+        if (I.geoV.has(id)) continue;
+        let k = capo + verso; const saltate = [];
+        while (k >= 0 && k < ps.length && !I.geoV.has(ps[k].loc_id)) { saltate.push(ps[k].loc_id); k += verso; }
+        if (!capi.has(id)) capi.set(id, []);
+        capi.get(id).push({ linea: l.linea_id, vicina: k >= 0 && k < ps.length ? ps[k].loc_id : null, saltate });
+      }
+    }
+    const out = [];
+    for (const via of ordina([...capi.keys()], x => [x])) {
+      const c = capi.get(via);
+      // esattamente due linee, e il punto non sta su altre linee in mezzo al loro percorso
+      if (c.length !== 2 || c[0].linea === c[1].linea || (I.puntiLoc.get(via) || []).length !== 2) continue;
+      if (!c[0].vicina || !c[1].vicina) continue;
+      const [a, b] = ordina(c, x => [x.linea]);
+      out.push({ via, linee: [a.linea, b.linea], da: a.vicina, a: b.vicina, tipo: "tratteggiato",
+        senza_coord: a.saltate.slice().reverse().concat([via], b.saltate) });
+    }
+    return out;
   }
 
   // Scostamento parallelo (in «corsie»): linee che condividono un tratto fra le stesse due località, o che la
