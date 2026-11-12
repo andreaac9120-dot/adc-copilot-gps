@@ -13,6 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="cartina.css">
 </head>
 <body>
 <div class="wrap">
@@ -30,6 +31,14 @@
     </header>
 
     <div id="agg" hidden></div>
+
+    <!-- 1.0.44: strumenti in riquadri -->
+    <nav class="tiles" aria-label="Strumenti">
+      <button class="tile" type="button" data-cmd="cartina">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 12 18 7l12 5 12-5v29l-12 5-12-5-12 5z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 7v29M30 12v29" stroke="currentColor" stroke-width="2" opacity=".45"/><path d="M9 33c6-3 9-12 15-13s8 6 15-4" fill="none" stroke="var(--accent)" stroke-width="3.4" stroke-linecap="round"/><circle cx="24" cy="20" r="3" fill="var(--paper)" stroke="currentColor" stroke-width="2"/></svg>
+        <span><b>Cartina</b><small>Linee del database</small></span>
+      </button>
+    </nav>
 
     <!-- Generatore senza IA: dalla 1.0.38 è l'unico modo di creare un viaggio nell'app (lo studio con IA si chiede in chat) -->
     <section class="card" aria-labelledby="hGen">
@@ -103,6 +112,57 @@
     </section>
     <footer id="vPiede"></footer>
   </main>
+
+  <!-- ===== CARTINA DELLE LINEE (1.0.44) ===== -->
+  <main id="cartina" class="carta" hidden>
+    <header class="carta-bar">
+      <button class="back" type="button" data-cmd="home">‹ Home</button>
+      <div class="carta-tit"><b>Cartina linee</b><small id="cInfo"></small></div>
+      <button class="chip" type="button" data-cmd="theme" aria-label="Cambia tema giorno/notte">☀️/🌙</button>
+    </header>
+    <div class="carta-wrap" id="cWrap">
+      <canvas id="cCanvas" role="img" aria-label="Cartina delle linee del database. Tocca una linea per aprirne la scheda; usa Elenco linee per sceglierla da una lista."></canvas>
+      <div class="carta-tools">
+        <button class="cbtn" type="button" data-c="zin" aria-label="Ingrandisci">+</button>
+        <button class="cbtn" type="button" data-c="zout" aria-label="Riduci">−</button>
+        <button class="cbtn" type="button" data-c="centra" aria-label="Ricentra la cartina">⌖</button>
+      </div>
+      <button class="carta-elenco btn" type="button" data-c="elenco" id="cElenco" hidden>Elenco linee</button>
+      <details class="carta-leg" id="cLeg">
+        <summary>Legenda</summary>
+        <ul class="c-leg-comp" id="cLegComp"></ul>
+        <ul class="c-leg-tipi">
+          <li><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>località con coordinate verificate (V)</li>
+          <li><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="currentColor" stroke-width="3.4" stroke-dasharray="6 5"/></svg>collegamento indicativo: località intermedie senza coordinate</li>
+          <li><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M2 5h30" stroke="var(--paper)" stroke-width="1.2"/></svg>linea con stato R, I o N nel database</li>
+          <li><svg viewBox="0 0 34 10"><circle cx="17" cy="5" r="3.6" fill="var(--paper)" stroke="currentColor" stroke-width="1.8"/></svg>località importante (nodo)</li>
+        </ul>
+        <p class="note">Segmenti diritti tra località in ordine di progressiva: schema di orientamento, non il tracciato reale. Linee affiancate leggermente scostate per toccarle separatamente.</p>
+        <p class="note" id="cNoContorno" hidden>Contorno dell'Italia non disponibile.</p>
+      </details>
+      <div class="carta-vuota" id="cVuota" hidden><p><b>Nessun database dati di linea nel telefono.</b></p><p class="note">Torna alla home e usa «Aggiorna dati» (o «Importa database»): la cartina si costruisce dal database importato.</p></div>
+    </div>
+  </main>
+
+  <!-- ===== SCHEDA RIEPILOGATIVA DELLA LINEA (1.0.44) ===== -->
+  <main id="lineaV" hidden>
+    <header class="head c-lhead">
+      <div class="top-row">
+        <button class="back" type="button" data-c="mappa">‹ Cartina</button>
+        <div class="tools"><button class="chip" type="button" data-cmd="theme" aria-label="Cambia tema giorno/notte">☀️/🌙</button></div>
+      </div>
+      <div><div class="trainno" id="lTit"></div><div class="route" id="lSub"></div></div>
+      <nav class="c-barra" id="lBarra" aria-label="Completezza delle sezioni"></nav>
+      <div class="legend"><span><span class="dot d-V"></span>verificato</span><span><span class="dot d-R"></span>ricostruito</span><span><span class="dot d-I"></span>incerto</span><span><span class="dot d-N"></span>non reperito</span><span>tocca una riga per fonte e pagina</span></div>
+    </header>
+    <div id="lBody" class="c-body"></div>
+    <footer>Dati presi solo dal database. Fanno fede i documenti in vigore.</footer>
+  </main>
+</div>
+
+<div class="c-imgv" id="cImgV" hidden>
+  <div class="c-imgv-bar"><span id="cImgT"></span><button class="close" type="button" data-c="imgchiudi">Chiudi</button></div>
+  <div class="c-imgv-a" id="cImgA"><img id="cImgI" alt="Pagina FL"></div>
 </div>
 
 <div class="scrim" id="scrim" hidden></div>
@@ -130,6 +190,8 @@
 <script src="motore/genera.js"></script>
 <script src="motore/adcdb.js"></script>
 <script src="generatore.js"></script>
+<script src="motore/cartina_modello.js"></script>
+<script src="cartina.js"></script>
 </body>
 </html>
 

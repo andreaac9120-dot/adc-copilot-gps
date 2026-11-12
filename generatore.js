@@ -279,7 +279,7 @@ async function mostraSI(p, t = navNuova()) {
   revoca(imgURLs); imgURLs = urls;
   try { Scheda.show(p, imgURLs); } catch (err) { toast("Scheda non visualizzabile: " + testoErrore(err)); return false; }
   $("#vNota").textContent = "SENZA IA · " + $("#vNota").textContent;
-  $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
+  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
   return true;
 }

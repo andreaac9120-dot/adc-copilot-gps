@@ -1,6 +1,6 @@
 // ADC COPILOT – app: archivio viaggi e import dei pacchetti. Dalla 1.0.38 nessun invio di comandi a Claude:
 // lo studio con IA si chiede in chat (progetto ADC COPILOT); qui resta il generatore senza IA.
-const VERSION = "1.0.43";
+const VERSION = "1.0.44";
 const LAB_MOTIVO = { da_studiare: "da studiare", attesa_scheda_treno: "attesa Scheda Treno", attesa_massa_treno: "serve la massa", fl_mancante: "FL mancante", illeggibile: "illeggibile", discrepanza_massa: "masse diverse" };
 let imgURLs = {};
 
@@ -470,7 +470,7 @@ async function home() {
   if (typeof GPS !== "undefined") GPS.close();
   closeSheet(); Scheda.popClose();
   for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
-  $("#viaggio").hidden = true; $("#home").hidden = false;
+  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#viaggio").hidden = true; $("#home").hidden = false;
   let V = [];
   try { V = await DB.listViaggi(); } catch (err) { toast("Archivio non leggibile: " + testoErrore(err)); }
   V.sort((a, b) => dataId(b).localeCompare(dataId(a)) || String(a && a.id).localeCompare(String(b && b.id)));
@@ -502,7 +502,7 @@ async function apri(id) {
   }
   revoca(imgURLs); imgURLs = urls;
   try { Scheda.show(p, imgURLs); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
-  $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
+  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
   if (location.hash !== "#v=" + id) history.pushState({ v: id }, "", "#v=" + id);
 }
@@ -534,6 +534,7 @@ document.addEventListener("click", e => {
   const d = t.dataset;
   if (d.gps && typeof GPS !== "undefined") return GPS.handle(d.gps);
   if (d.cmd === "theme") return toggleTheme();
+  if (d.cmd === "cartina" && typeof Cartina !== "undefined") return Cartina.apri();
   if (d.cmd === "home") return history.length > 1 && location.hash ? history.back() : home();
   if (d.open) return apri(d.open);
   if (d.del) return elimina(d.del);
@@ -554,7 +555,12 @@ document.addEventListener("visibilitychange", () => {
   if (typeof GPS !== "undefined") GPS.visibilityChanged();
 });
 addEventListener("online", net); addEventListener("offline", net);
-addEventListener("popstate", () => { const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/); m ? apri(decodeURIComponent(m[1])) : s ? apriSI(decodeURIComponent(s[1])) : home(); });
+addEventListener("popstate", () => {
+  const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/), l = location.hash.match(/^#linea=(.+)$/);
+  if (typeof Cartina !== "undefined" && location.hash === "#cartina") return Cartina.apri(false);   // 1.0.44
+  if (typeof Cartina !== "undefined" && l) return Cartina.apriLinea(decodeURIComponent(l[1]), false);
+  m ? apri(decodeURIComponent(m[1])) : s ? apriSI(decodeURIComponent(s[1])) : home();
+});
 
 // ---------- Offline e aggiornamenti (R01, R02) ----------
 // La nuova versione si scarica intera in sottofondo e si attiva solo quando tocchi "Aggiorna":
@@ -594,6 +600,9 @@ async function registraSW() {
   await home();
   if (new URLSearchParams(location.search).has("condivisi")) await importaCondivisi();
   const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/);
+  const l = location.hash.match(/^#linea=(.+)$/);
   if (m) apri(decodeURIComponent(m[1])); else if (s && typeof apriSI === "function") apriSI(decodeURIComponent(s[1]));
+  else if (typeof Cartina !== "undefined" && location.hash === "#cartina") Cartina.apri(false);
+  else if (typeof Cartina !== "undefined" && l) Cartina.apriLinea(decodeURIComponent(l[1]), false);
 })();
 
