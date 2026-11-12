@@ -159,7 +159,7 @@ test("altre sezioni: esercizio scoperto, indicatori, affiancate, utenze, pagine,
   assert.equal(sez(R, "pagine_fl").righe.length, 1);
   assert.deepEqual(sez(R, "discrepanze").righe.map(r => r.disc_id), ["D2"]);
   const I = sez(R, "intestazione");
-  assert.equal(I.campi.find(c => c.campo === "etcs_l2_obbl").valore, "no");
+  assert.ok(!I.campi.some(c => c.campo === "etcs_l2_obbl"));   // 1.0.44: ETCS L2 non si mostra nell'intestazione
   assert.equal(sez(M.riepilogo(prova(), "L_B"), "intestazione").campi.find(c => c.campo === "binari").valore, null);
 });
 test("database vuoto o parziale: nessuna eccezione, solo «da studiare»", () => {

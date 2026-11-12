@@ -179,7 +179,6 @@
       ["nome", "Nome", val(L.nome)], ["nome_breve", "Nome breve", val(L.nome_breve)], ["compartimento", "Compartimento", val(L.compartimento)],
       ["binari", "Binari", val(L.binari)], ["senso_pari", "Senso pari", vuoto(L.senso_pari) ? null : (VALORI_SENSO[L.senso_pari] || L.senso_pari)],
       ["alimentazione", "Alimentazione", val(L.alimentazione)],
-      ["etcs_l2_obbl", "ETCS L2 obbligatorio", L.etcs_l2_obbl === 1 ? "sì" : L.etcs_l2_obbl === 0 ? "no" : null],
       ["fonte", "Fonte FL", f ? f.breve + (vuoto(f.edizione) ? "" : " – " + f.edizione) : val(L.fonte)],
       ["note", "Note", val(L.note)]
     ].map(([campo, etichetta, valore]) => ({ campo, etichetta, valore }));

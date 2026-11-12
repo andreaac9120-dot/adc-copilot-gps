@@ -225,13 +225,11 @@ VALORI_SENSO = {"crescente": "in senso pari le progressive crescono", "decrescen
 
 def sez_intestazione(I, L, ctx, T):
     f = I["fonti"].get(L.get("fonte"))
-    e = L.get("etcs_l2_obbl")
     campi = [
         ("nome", "Nome", val(L.get("nome"))), ("nome_breve", "Nome breve", val(L.get("nome_breve"))),
         ("compartimento", "Compartimento", val(L.get("compartimento"))), ("binari", "Binari", val(L.get("binari"))),
         ("senso_pari", "Senso pari", None if vuoto(L.get("senso_pari")) else VALORI_SENSO.get(L["senso_pari"], L["senso_pari"])),
         ("alimentazione", "Alimentazione", val(L.get("alimentazione"))),
-        ("etcs_l2_obbl", "ETCS L2 obbligatorio", "sì" if e == 1 and not isinstance(e, bool) else "no" if e == 0 and not isinstance(e, bool) else None),
         ("fonte", "Fonte FL", (f["breve"] + ("" if vuoto(f.get("edizione")) else " – " + f["edizione"])) if f else val(L.get("fonte"))),
         ("note", "Note", val(L.get("note"))),
     ]
