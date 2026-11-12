@@ -465,8 +465,20 @@ const dataId = p => String(p && p.id || "").split("_")[1] || "";
 const NAV = { n: 0 };
 const navNuova = () => ++NAV.n;
 const revoca = urls => { for (const u of Object.values(urls)) URL.revokeObjectURL(u); };
+// 1.0.44: pagina Database (aggiorna, importa, collegamento), aperta dal menu ⋮
+function apriDatabase(push = true) {
+  navNuova();
+  if (typeof GPS !== "undefined") GPS.close();
+  closeSheet(); Scheda.popClose();
+  if (typeof Cartina !== "undefined") Cartina.nascondi();
+  $("#home").hidden = true; $("#viaggio").hidden = true; $("#dbV").hidden = false; scrollTo(0, 0);
+  if (push && location.hash !== "#database") history.pushState({ db: 1 }, "", "#database");
+  if (typeof genInfo === "function") genInfo();
+  if (typeof syncStato === "function") syncStato();
+}
 async function home() {
   navNuova();
+  $("#dbV").hidden = true;
   if (typeof GPS !== "undefined") GPS.close();
   closeSheet(); Scheda.popClose();
   for (const u of Object.values(imgURLs)) URL.revokeObjectURL(u); imgURLs = {};
@@ -502,7 +514,7 @@ async function apri(id) {
   }
   revoca(imgURLs); imgURLs = urls;
   try { Scheda.show(p, imgURLs); } catch (err) { return toast("Scheda non visualizzabile: " + testoErrore(err)); }
-  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
+  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#dbV").hidden = true; $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
   if (location.hash !== "#v=" + id) history.pushState({ v: id }, "", "#v=" + id);
 }
@@ -557,7 +569,8 @@ document.addEventListener("visibilitychange", () => {
 addEventListener("online", net); addEventListener("offline", net);
 addEventListener("popstate", () => {
   const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/), l = location.hash.match(/^#linea=(.+)$/);
-  if (typeof Cartina !== "undefined" && location.hash === "#cartina") return Cartina.apri(false);   // 1.0.44
+  if (location.hash === "#database") return apriDatabase(false);   // 1.0.44
+  if (typeof Cartina !== "undefined" && location.hash === "#cartina") return Cartina.apri(false);
   if (typeof Cartina !== "undefined" && l) return Cartina.apriLinea(decodeURIComponent(l[1]), false);
   m ? apri(decodeURIComponent(m[1])) : s ? apriSI(decodeURIComponent(s[1])) : home();
 });
@@ -602,6 +615,7 @@ async function registraSW() {
   const m = location.hash.match(/^#v=(.+)$/), s = location.hash.match(/^#s=(.+)$/);
   const l = location.hash.match(/^#linea=(.+)$/);
   if (m) apri(decodeURIComponent(m[1])); else if (s && typeof apriSI === "function") apriSI(decodeURIComponent(s[1]));
+  else if (location.hash === "#database") apriDatabase(false);
   else if (typeof Cartina !== "undefined" && location.hash === "#cartina") Cartina.apri(false);
   else if (typeof Cartina !== "undefined" && l) Cartina.apriLinea(decodeURIComponent(l[1]), false);
 })();

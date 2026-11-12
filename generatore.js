@@ -132,7 +132,7 @@ async function genGenera(btn) {
   if (GEN.occupato) return;
   GEN.occupato = true;   // F07: blocco preso subito, prima di ogni attesa
   let T = null; try { T = await DB.getConf("adcdb"); } catch (_) {}
-  if (!T) { GEN.occupato = false; return toast("Importa prima il database dati di linea"); }
+  if (!T) { GEN.occupato = false; return toast("Prima aggiorna o importa il database: menu ⋮ → Database"); }
   const testo = $("#gTraccia").value.trim();
   const f = $("#gScheda").files[0] || null;
   const locoUtente = $("#gLoco").value.trim();
@@ -279,7 +279,7 @@ async function mostraSI(p, t = navNuova()) {
   revoca(imgURLs); imgURLs = urls;
   try { Scheda.show(p, imgURLs); } catch (err) { toast("Scheda non visualizzabile: " + testoErrore(err)); return false; }
   $("#vNota").textContent = "SENZA IA · " + $("#vNota").textContent;
-  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
+  if (typeof Cartina !== "undefined") Cartina.nascondi(); $("#dbV").hidden = true; $("#home").hidden = true; $("#viaggio").hidden = false; scrollTo(0, 0);
   if (typeof GPS !== "undefined") GPS.open(p);
   return true;
 }
@@ -427,14 +427,17 @@ const mb = b => (b / 1048576).toFixed(1).replace(".", ",") + " MB";
 async function syncStato() {
   const b = $("#bSync"), info = $("#syncInfo"), avv = $("#syncAvv"); if (!b) return;
   const c = await syncConf();
+  // 1.0.44: pallino rosso sui tre puntini del menu (e sulla voce Database) quando ci sono novità da scaricare
+  const nuove = !!(c.token && c.novita && c.novita.length);
+  document.querySelectorAll(".screen-more, [data-options-db]").forEach(e => e.classList.toggle("notifica", nuove));
   b.classList.remove("sync-red", "sync-ok");
-  if (!c.token) { b.firstChild.textContent = "Aggiorna dati"; info.textContent = "Non collegato al repository: tocca «Collegamento»"; }
+  if (!c.token) { b.firstChild.textContent = "Aggiorna database"; info.textContent = "Non collegato al repository: tocca «Collegamento»"; }
   else if (c.novita && c.novita.length) {
     b.classList.add("sync-red");
-    b.firstChild.textContent = `Aggiorna dati (${c.novita.length})`;
+    b.firstChild.textContent = `Aggiorna database (${c.novita.length})`;
     info.textContent = `Novità: ${c.novita.map(x => x.nome).join(", ")} · ${mb(c.novita.reduce((s, x) => s + x.byte, 0))}`;
   } else {
-    b.firstChild.textContent = "Aggiorna dati";
+    b.firstChild.textContent = "Aggiorna database";
     if (c.errore) info.textContent = "Controllo non riuscito · tocca per riprovare";
     else { if (c.controllo) b.classList.add("sync-ok"); info.textContent = c.controllo ? `Dati aggiornati · controllato ${dataOra(c.controllo)}` : "Tocca per controllare"; }
   }

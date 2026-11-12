@@ -42,16 +42,9 @@
 
     <!-- Generatore senza IA: dalla 1.0.38 è l'unico modo di creare un viaggio nell'app (lo studio con IA si chiede in chat) -->
     <section class="card" aria-labelledby="hGen">
-      <div class="card-head"><h2 id="hGen">Nuovo viaggio senza IA</h2>
-        <label class="btn file-btn">Importa database<input type="file" id="fDb" accept=".json,.adcdb.json,application/json" hidden></label>
-      </div>
+      <div class="card-head"><h2 id="hGen">Nuovo viaggio senza IA</h2></div>
       <p class="note">Crea il pacchetto direttamente nel telefono, senza Claude e senza rete, con i dati di linea del database. Funziona solo sulle linee già caricate nel database. Per studiare una linea con l'IA chiedilo in chat a Claude (progetto ADC COPILOT, comando STUDIO LINEA CONDOTTA con la Scheda Treno).</p>
-      <div class="actions sync-row">
-        <button class="btn" type="button" id="bSync" data-gen="sync">Aggiorna dati<small id="syncInfo"></small></button>
-        <button class="btn file-btn" type="button" data-gen="token">Collegamento</button>
-      </div>
-      <p class="note warn-note" id="syncAvv" hidden></p>
-      <p class="note" id="genDb"></p>
+      <p class="note">Database dati di linea: menu <b>⋮ → Database</b> (aggiorna, importa, collegamento).</p>
       <div class="actions">
         <label class="btn file-btn">Importa pagine FL<small>File .adcimg.json: fiancate e schemi unifilari per il fumetto</small><input type="file" id="fImg" accept=".json,.adcimg.json,application/json" multiple hidden></label>
       </div>
@@ -113,6 +106,26 @@
     <footer id="vPiede"></footer>
   </main>
 
+  <!-- ===== DATABASE (1.0.44): aggiornamento, importazione e collegamento, dal menu ⋮ ===== -->
+  <main id="dbV" hidden>
+    <header class="head">
+      <div class="top-row">
+        <button class="back" type="button" data-cmd="home">‹ Home</button>
+        <div class="tools"><button class="chip" type="button" data-cmd="theme" aria-label="Cambia tema giorno/notte">☀️/🌙</button></div>
+      </div>
+      <div><div class="trainno">Database</div><div class="route">Dati di linea del repository privato</div></div>
+    </header>
+    <section class="card" aria-label="Database dati di linea">
+      <p class="note" id="genDb"></p>
+      <div class="actions sync-row">
+        <button class="btn" type="button" id="bSync" data-gen="sync">Aggiorna database<small id="syncInfo"></small></button>
+        <label class="btn file-btn">Importa database<small>File .adcdb.json</small><input type="file" id="fDb" accept=".json,.adcdb.json,application/json" hidden></label>
+        <button class="btn file-btn" type="button" data-gen="token">Collegamento<small>Token di sola lettura del repository</small></button>
+      </div>
+      <p class="note warn-note" id="syncAvv" hidden></p>
+    </section>
+  </main>
+
   <!-- ===== CARTINA DELLE LINEE (1.0.44) ===== -->
   <main id="cartina" class="carta" hidden>
     <header class="carta-bar">
@@ -140,7 +153,7 @@
         <p class="note">Segmenti diritti tra località in ordine di progressiva: schema di orientamento, non il tracciato reale. Linee affiancate leggermente scostate per toccarle separatamente.</p>
         <p class="note" id="cNoContorno" hidden>Contorno dell'Italia non disponibile.</p>
       </details>
-      <div class="carta-vuota" id="cVuota" hidden><p><b>Nessun database dati di linea nel telefono.</b></p><p class="note">Torna alla home e usa «Aggiorna dati» (o «Importa database»): la cartina si costruisce dal database importato.</p></div>
+      <div class="carta-vuota" id="cVuota" hidden><p><b>Nessun database dati di linea nel telefono.</b></p><p class="note">Dal menu ⋮ della home apri <b>Database</b> e usa «Aggiorna database» (o «Importa database»): la cartina si costruisce dal database importato.</p></div>
     </div>
   </main>
 

@@ -136,3 +136,12 @@
 .c-imgv-bar span { flex: 1; }
 .c-imgv-a { position: absolute; inset: 0; overflow: hidden; touch-action: none; contain: strict; }
 .c-imgv-a img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; user-select: none; -webkit-user-drag: none; pointer-events: none; background: #fff; }
+
+/* ---------- Pallino rosso: aggiornamento del database disponibile (1.0.44) ---------- */
+.screen-more { position: relative; }
+.screen-more.notifica::after { content: ""; position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--danger); border: 2px solid var(--paper); }
+[data-options-db] .notifica-testo { display: none; color: var(--danger); font-weight: 700; }
+[data-options-db].notifica .notifica-testo { display: inline; }
+[data-options-db].notifica > span:first-child::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); margin-right: 8px; vertical-align: middle; }
+#dbV .sync-row { display: grid; gap: 10px; }

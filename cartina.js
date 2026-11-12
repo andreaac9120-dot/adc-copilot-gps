@@ -324,7 +324,7 @@ const Cartina = (() => {
   }
 
   // ---------- Apertura e navigazione ----------
-  function mostra(id) { for (const v of ["#home", "#viaggio", "#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = v !== id; } }
+  function mostra(id) { for (const v of ["#home", "#viaggio", "#dbV", "#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = v !== id; } }
   function nascondi() {
     for (const v of ["#cartina", "#lineaV"]) { const e = $(v); if (e) e.hidden = true; }
     liberaImmagini(); chiudiImg();
@@ -534,7 +534,7 @@ const Cartina = (() => {
       let b = null;
       try { b = r.img ? await DB.getImg("fl", r.img) : null; } catch (_) {}
       if (S.linea !== id) return;
-      if (!b) { el.innerHTML = `<small>immagine non nel telefono<br>(«Aggiorna dati» o «Importa pagine FL»)</small>`; el.classList.add("manca"); continue; }
+      if (!b) { el.innerHTML = `<small>immagine non nel telefono<br>(menu ⋮ → Database, o «Importa pagine FL»)</small>`; el.classList.add("manca"); continue; }
       const u = URL.createObjectURL(b); S.imgURL.push(u); r._url = u;
       el.innerHTML = `<img alt="" loading="lazy" src="${u}">`;
     }
@@ -543,7 +543,7 @@ const Cartina = (() => {
   const IV = { V: { s: 1, tx: 0, ty: 0 }, pronta: false };
   function apriImg(k) {
     const r = S.img[k]; if (!r) return;
-    if (!r._url) return toast("Immagine non presente nel telefono: usa «Aggiorna dati» o «Importa pagine FL»");
+    if (!r._url) return toast("Immagine non presente nel telefono: aggiorna il database (menu ⋮ → Database) o usa «Importa pagine FL»");
     const box = $("#cImgV"), img = $("#cImgI");
     $("#cImgT").textContent = `${r.fonte_breve} ${r.pag}${r.senso ? " · " + r.senso : ""}`;
     box.hidden = false;
