@@ -183,3 +183,14 @@ test("progressiva della Scheda diversa dal database: solo con discrepanza aperta
   // senza la discrepanza la località non si riconosce (nessuna tolleranza generica)
   assert.equal(Co.componi({ ...T5, discrepanze: [] }, null, S).viaggio.copertura.completa, false);
 });
+
+test("utenze di tratto per senso di marcia: vale solo quella del senso del treno (m105, 1.0.46)", () => {
+  const u = (chi, senso) => ({ ruolo: "DCO", chi, loc_id: null, linea_id: "L1", km_da: 0, km_a: 10, compartimento: null,
+    gsmr: chi === "DCO pari" ? "1" : "2", fs: null, altro: null, fonte: "FLX", pag: "4", st: "V", senso });
+  const T2 = { ...T, utenze: [u("DCO pari", "pari"), u("DCO dispari", "dispari"), u("DCO comune", null)] };
+  const c = Co.componi(T2, LT.leggi(TRACCIA), null);
+  const p = G.genera(T2, c.viaggio, new Date("2026-11-03T08:00:00Z"));
+  const senso = / senso (pari|dispari)\)$/.exec(p.condotta.SEG.A.nome)[1];
+  const chi = p.condotta.DCO.A.map(r => r[0]).sort();
+  assert.deepEqual(chi, ["DCO comune", `DCO ${senso}`].sort());
+});

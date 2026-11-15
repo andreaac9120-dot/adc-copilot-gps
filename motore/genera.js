@@ -214,7 +214,9 @@
 
       // DCO/DC/DOTE/DCCM del tratto
       const righe = [], vistiTel = new Set();
-      for (const u of T.utenze.filter(u => ["DC", "DCO", "DOTE"].includes(u.ruolo) && u.linea_id === L.linea_id && sovr(u, t.lo, t.hi))) {
+      // m105: un'utenza con senso vale solo nel suo senso di marcia (vuoto o «entrambi» = tutti e due)
+      for (const u of T.utenze.filter(u => ["DC", "DCO", "DOTE"].includes(u.ruolo) && u.linea_id === L.linea_id &&
+        (!nn(u.senso) || u.senso === s || u.senso === "entrambi") && sovr(u, t.lo, t.hi))) {
         const num = numeri(u), k = JSON.stringify([u.chi, num]);
         if (!vistiTel.has(k)) { vistiTel.add(k); righe.push([u.chi, num, db.src(u.fonte, u.pag), u.st]); usa(u.fonte); }
       }
