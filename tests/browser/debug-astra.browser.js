@@ -43,7 +43,7 @@ function server() {
   await pg.goto(`http://127.0.0.1:${srv.address().port}/index.html`); await pg.waitForTimeout(800);
   const pkg = pacchetto();
   const out = {};
-  const prove = ["F05", "F06", "F07", "F08", "F09", "F10", "F13", "F14", "SYNCOK"];
+  const prove = ["F05", "F06", "F07", "F08", "F09", "F10", "F13", "F14", "SYNCOK", "RIPRESA"];
   if (prove.includes("F05")) out.F05 = await pg.evaluate(async txt => {
     const r = await importaTesto(txt, "x.adc.json");
     const id = "12345_2026-11-03", path = "img/flx_p5_principale_pari.jpg";
@@ -142,6 +142,34 @@ function server() {
     return { richiesteAppese: n, durataMs: durata, errore: c.errore, pulsanteLibero: !document.querySelector("#bSync").disabled && SYNC.occupato === null,
       dopo503: !!r, refUsata: urls.filter(u => u.includes("indice")).map(u => u.split("ref=")[1]) };
   });
+  // 1.0.47: file grande che si interrompe a metà: si riprende con Range (206) o, se GitHub manda il file intero, da capo
+  if (prove.includes("RIPRESA")) out.RIPRESA = await pg.evaluate(async () => {
+    SYNC.attesa = { risposta: 2000, corpo: 2000, silenzio: 300, riprova: 10 };
+    const testo = "àèìòù-" + "x".repeat(200000) + "-fine";
+    const byte = new TextEncoder().encode(testo);
+    // consegna i primi «dopo» byte, poi la connessione cade (rotto) o resta muta (fermo)
+    const flusso = (dati, dopo, cade) => { let n = 0; return new ReadableStream({ pull(c) {
+      if (n++ === 0) return c.enqueue(dati.slice(0, dopo));
+      if (cade) return c.error(new TypeError("network error"));
+      return new Promise(() => {}); } }); };
+    const rotto = (dati, dopo) => flusso(dati, dopo, true), fermo = (dati, dopo) => flusso(dati, dopo, false);
+    const prova = async (comeRisponde, opz = {}) => {
+      const range = [], avanz = []; let k = 0;
+      window.fetch = async (u, o) => { range.push(o.headers.Range || ""); return comeRisponde(k++, o.headers.Range); };
+      let txt = null, errore = null;
+      try { txt = await ghGet("adc_linee_x.adcdb.json", "github_pat_TEST", undefined, { byte: byte.length, tentativi: 6, avanzamento: n => avanz.push(n), ...opz }); }
+      catch (e) { errore = e.message; }
+      return { uguale: txt === testo, range, errore, avanzamento: avanz.length > 0 };
+    };
+    const conRange = await prova((k, rg) => {
+      if (k === 0) return new Response(rotto(byte, 70001), { status: 200 });
+      if (k === 1) return new Response(fermo(byte.slice(70001), 50000), { status: 206 });
+      const da = +rg.match(/\d+/)[0]; return new Response(byte.slice(da), { status: 206 });
+    });
+    const senzaRange = await prova(k => k === 0 ? new Response(rotto(byte, 90000), { status: 200 }) : new Response(byte, { status: 200 }));
+    const sempreRotto = await prova(() => new Response(rotto(byte, 10), { status: 200 }), { tentativi: 3 });
+    return { conRange, senzaRange, sempreRotto };
+  });
   if (prove.includes("F13")) out.F13 = await pg.evaluate(async txt => {
     window.confirm = () => true; const r = await importaTesto(txt, "x"); const id = r.id;
     await home(); await new Promise(r => setTimeout(r, 100));
@@ -181,5 +209,9 @@ function server() {
   assert.equal(out.F13.SI.homeVisibile, true); assert.equal(out.F13.Claude.homeVisibile, true); assert.equal(out.F13.aperturaNormale.viaggioVisibile, true);
   assert.deepEqual(out.F14, { buono: true, recupero: true, eliminato: true });
   assert.equal(out.SYNCOK.tokenDopo401, true);
+  const R = out.RIPRESA;
+  assert.equal(R.conRange.uguale, true); assert.deepEqual(R.conRange.range, ["", "bytes=70001-", "bytes=120001-"]); assert.equal(R.conRange.avanzamento, true);
+  assert.equal(R.senzaRange.uguale, true); assert.deepEqual(R.senzaRange.range, ["", "bytes=90000-"]);
+  assert.equal(R.sempreRotto.range.length, 4);   // il primo tentativo porta dati e non si conta assert.match(R.sempreRotto.errore, /download interrotto dopo/);
   console.log("PROVE NEL BROWSER SUPERATE");
 })().catch(e => { console.error(e); process.exit(1); });
