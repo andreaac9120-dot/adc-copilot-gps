@@ -358,43 +358,93 @@ const RE_FILE_SYNC = /^(adc_linee_\d{8}-\d{4}\.adcdb\.json|pagine\/pagine_[A-Z0-
 async function syncConf() { let c = null; try { c = await DB.getConf("sync"); } catch (_) {} return c || {}; }
 // F09: ogni richiesta ha un tempo massimo (risposta 30 s; contenuto 60 s più 1 s ogni 20 KB attesi) e si può
 // annullare; reti assenti, tempi scaduti, 429 e 5xx si riprovano una volta dopo una breve attesa (sono solo letture).
-SYNC.attesa = { risposta: 30000, corpo: 60000, riprova: 2000 };
+// 1.0.47: il database pesa decine di MB e su rete mobile la connessione può cadere a metà del file («download
+// interrotto»): prima si riprovava una sola volta ricominciando da zero, quindi quasi sempre falliva di nuovo.
+// Ora il contenuto si legge a pezzi e, se si interrompe, il tentativo successivo chiede solo la parte mancante
+// (Range); se GitHub non la concede si riparte da capo. I file di dati hanno più tentativi, con attese crescenti,
+// e un tentativo che ha portato a casa dati nuovi non si conta come fallito. Oltre al tempo massimo c'è un
+// tempo di silenzio: se per 30 s non arriva nemmeno un byte il download è fermo e si riprova.
+// Il file ricomposto si controlla comunque con la sua impronta SHA-256 prima di installarlo.
+SYNC.attesa = { risposta: 30000, corpo: 60000, silenzio: 30000, riprova: 2000 };
+SYNC.maxTentativi = 30;   // tetto assoluto, anche quando ogni tentativo porta qualche dato
 const attesaCorpo = byte => SYNC.attesa.corpo + Math.ceil((byte || 0) / 20000) * 1000;
 class SyncRiprova extends Error {}
 async function ghGet(path, token, gen, opz = {}) {
   const url = opz.url || `https://api.github.com/repos/${SYNC.owner}/${SYNC.repo}/contents/${SYNC.dir}/${path}?ref=${encodeURIComponent(opz.ref || SYNC.ref)}`;
-  for (let tentativo = 0; ; tentativo++) {
-    try { return await ghGetUnaVolta(url, token, gen, opz); }
+  const tentativi = opz.tentativi || 2;
+  // dati già ricevuti (si conservano fra un tentativo e l'altro per riprendere da dove si era arrivati)
+  const buf = { pezzi: [], byte: 0, range: true, rangeFalliti: 0 };
+  let falliti = 0;
+  for (let n = 1; ; n++) {
+    const prima = buf.byte;
+    try { return await ghGetUnaVolta(url, token, gen, opz, buf); }
     catch (err) {
-      if (!(err instanceof SyncRiprova) || tentativo >= 1 || (gen !== undefined && gen !== SYNC.gen)) throw err;
-      await new Promise(r => setTimeout(r, SYNC.attesa.riprova));
+      if (!(err instanceof SyncRiprova) || (gen !== undefined && gen !== SYNC.gen)) throw err;
+      if (buf.byte > prima) falliti = 0; else falliti++;
+      if (falliti >= tentativi || n >= SYNC.maxTentativi) throw err;
+      await new Promise(r => setTimeout(r, SYNC.attesa.riprova * Math.min(2 ** Math.max(0, falliti - 1), 8)));
     }
   }
 }
-async function ghGetUnaVolta(url, token, gen, opz) {
+async function ghGetUnaVolta(url, token, gen, opz, buf) {
   const ac = new AbortController(); SYNC.richieste.add(ac);
   if (gen !== undefined && gen !== SYNC.gen) ac.abort();
-  let scaduto = false;
-  const scadenza = ms => setTimeout(() => { scaduto = true; ac.abort(); }, ms);
-  const fermo = () => { if (scaduto) return new SyncRiprova("GitHub non risponde (tempo scaduto)"); if (ac.signal.aborted) return new SyncAnnullato("operazione annullata"); return null; };
-  let timer = scadenza(SYNC.attesa.risposta);
+  let scaduto = "";
+  const scadenza = (ms, perche = "GitHub non risponde (tempo scaduto)") => setTimeout(() => { scaduto = perche; ac.abort(); }, ms);
+  const fermo = () => { if (scaduto) return new SyncRiprova(scaduto); if (ac.signal.aborted) return new SyncAnnullato("operazione annullata"); return null; };
+  let timer = scadenza(SYNC.attesa.risposta), silenzio = null;
+  const da = buf.range ? buf.byte : 0;
   try {
     let r;
+    const headers = { Authorization: `Bearer ${token}`, Accept: opz.accept || "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" };
+    if (da > 0) headers.Range = `bytes=${da}-`;
     try {
-      r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: opz.accept || "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" },
-        cache: "no-store", signal: ac.signal });
-    } catch (_) { throw fermo() || new SyncRiprova("rete non raggiungibile"); }
+      r = await fetch(url, { headers, cache: "no-store", signal: ac.signal });
+    } catch (_) {
+      const e = fermo(); if (e) throw e;
+      // forse il browser o GitHub non accettano la ripresa: dopo due rifiuti si torna a scaricare il file intero
+      if (da > 0 && ++buf.rangeFalliti >= 2) buf.range = false;
+      throw new SyncRiprova("rete non raggiungibile");
+    }
     clearTimeout(timer);
+    if (r.status === 416 && da > 0) { buf.range = false; throw new SyncRiprova("ripresa del download non accettata"); }
     if (r.status === 401) throw new Error("token non valido o scaduto: creane uno nuovo su GitHub");
     if (r.status === 403 && r.headers.get("X-RateLimit-Remaining") === "0") throw new Error("troppe richieste a GitHub, riprova tra poco");
     if (r.status === 403) throw new Error("il token non ha il permesso di lettura sul repository");
     if (r.status === 404) throw new Error("repository o file non visibile con questo token (controlla che il token sia per adc-copilot-db)");
     if (r.status === 429 || r.status >= 500) throw new SyncRiprova(`GitHub ha risposto ${r.status}`);
     if (!r.ok) throw new Error(`GitHub ha risposto ${r.status}`);
-    timer = scadenza(attesaCorpo(opz.byte));
-    try { return await r.text(); }
-    catch (_) { throw fermo() || new SyncRiprova("download interrotto"); }
-  } finally { clearTimeout(timer); SYNC.richieste.delete(ac); }
+    // 206 = arriva solo la parte mancante; qualsiasi altra risposta porta il file intero: si riparte da zero
+    if (!(r.status === 206 && da > 0)) { buf.pezzi = []; buf.byte = 0; }
+    const totale = opz.byte || 0;
+    timer = scadenza(attesaCorpo(Math.max(0, totale - buf.byte)));
+    const sec = Math.round(SYNC.attesa.silenzio / 1000);
+    try {
+      if (!r.body) { const t = new Uint8Array(await r.arrayBuffer()); buf.pezzi.push(t); buf.byte += t.length; }
+      else {
+        const rd = r.body.getReader();
+        // anche se il flusso non reagisce all'annullamento, la lettura si sblocca allo scadere dei tempi
+        const annullato = new Promise((_, no) => { const f = () => no(new Error("annullato")); if (ac.signal.aborted) f(); else ac.signal.addEventListener("abort", f, { once: true }); });
+        annullato.catch(() => {});
+        for (;;) {
+          clearTimeout(silenzio); silenzio = scadenza(SYNC.attesa.silenzio, `download fermo: nessun dato da GitHub per ${sec} s`);
+          let pezzo;
+          try { pezzo = await Promise.race([rd.read(), annullato]); }
+          catch (err) { rd.cancel().catch(() => {}); throw err; }
+          const { done, value } = pezzo;
+          if (done) break;
+          buf.pezzi.push(value); buf.byte += value.length;
+          if (opz.avanzamento) try { opz.avanzamento(buf.byte, totale); } catch (_) {}
+        }
+      }
+    } catch (_) {
+      const e = fermo(); if (e) throw e;
+      throw new SyncRiprova("download interrotto" + (totale ? ` dopo ${mb(buf.byte)} di ${mb(totale)}` : "") + ": connessione caduta");
+    }
+    const testo = await new Blob(buf.pezzi).text();
+    buf.pezzi = []; buf.byte = 0;
+    return testo;
+  } finally { clearTimeout(timer); clearTimeout(silenzio); SYNC.richieste.delete(ac); }
 }
 // F09: commit attuale del ramo: indice e file di un aggiornamento si leggono tutti dalla stessa revisione,
 // anche se nel frattempo il repository cambia. Se non si riesce a leggerlo si usa il ramo (come prima).
@@ -493,12 +543,16 @@ async function syncAggiornaOra() {
   const r = await syncControllaOra(false); if (!r) return;
   if (!r.nov.length) return toast("Dati già aggiornati");
   const ok = [], ko = [];
+  // 1.0.47: lo schermo resta acceso durante il download (se si spegne Android può sospendere l'app e la connessione)
+  let schermo = null; try { schermo = navigator.wakeLock ? await navigator.wakeLock.request("screen") : null; } catch (_) {}
   try {
     for (const [k, x] of r.nov.entries()) {
       if (r.gen !== SYNC.gen) { ko.push(`${x.nome}: annullato (collegamento cambiato)`); continue; }
-      info.textContent = `Scarico ${k + 1}/${r.nov.length}: ${x.nome}${x.byte ? " · " + mb(x.byte) : ""}…`;
+      const cosa = `Scarico ${k + 1}/${r.nov.length}: ${x.nome}`;
+      info.textContent = `${cosa}${x.byte ? " · " + mb(x.byte) : ""}…`;
       try {
-        const txt = await ghGet(x.file, r.token, r.gen, { ref: r.ref, byte: x.byte });
+        const txt = await ghGet(x.file, r.token, r.gen, { ref: r.ref, byte: x.byte, tentativi: 6,
+          avanzamento: (n, tot) => { info.textContent = `${cosa} · ${mb(n)}${tot ? " di " + mb(tot) : ""}…`; } });
         if (r.gen !== SYNC.gen) throw new SyncAnnullato("annullato (collegamento cambiato)");
         if (x.tipo === "db") {
           const v = await AdcDb.controlla(txt);
@@ -515,6 +569,7 @@ async function syncAggiornaOra() {
       } catch (err) { ko.push(`${x.nome}: ${testoErrore(err)}`); }
     }
   } finally {
+    if (schermo) schermo.release().catch(() => {});
     await syncControllaOra(true).catch(() => {}); await genInfo();
   }
   if (ko.length) openSheet(shHead("Aggiornamento dati", `${ok.length} aggiornati · ${ko.length} non riusciti`) +
