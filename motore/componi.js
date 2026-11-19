@@ -19,11 +19,27 @@
     return s.replace(/[^A-Z0-9]/g, "");
   }
   function simile(a, b) {
-    a = norm(a); b = norm(b);
-    if (!a || !b) return 0;
-    if (a === b) return 1;   // 1.0.40: uguale vince sul prefisso («TORINO STURA» / «TORINO STURA ORIGINE AV»)
-    if (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a))) return 0.95;
-    return C.ratio(a, b);
+    const na = norm(a), nb = norm(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;   // 1.0.40: uguale vince sul prefisso («TORINO STURA» / «TORINO STURA ORIGINE AV»)
+    if (na.length >= 5 && nb.length >= 5 && (na.startsWith(nb) || nb.startsWith(na))) return 0.95;
+    const r = C.ratio(na, nb);
+    // 1.0.48: nome abbreviato parola per parola (Scheda 60755 del 19/11/2026: «S. Ant. di Sal.» = S. Antonino di Saluggia,
+    // «Rho Dev.E.L.NO»): sotto il prefisso (0,95) e l'uguaglianza, così non cambia la scelta tra nomi già simili
+    return r < 0.9 && (abbreviato(a, b) || abbreviato(b, a)) ? 0.9 : r;
+  }
+  // parole del nome senza accenti, punti e apostrofi («Sant'Antonino» → SANT ANTONINO, «Santhià» → SANTHIA)
+  function parole(s) {
+    s = String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[`\u00b4']/g, " ").toUpperCase().replace(/\(.*?\)/g, " ").replace(/°/g, " ");
+    for (const [x, y] of ESPANDI) s = s.replace(x, y);
+    return s.split(/[^A-Z0-9]+/).filter(w => w);
+  }
+  // ogni parola di «corto» è l'inizio della parola corrispondente di «lungo», stesse parole e stesso ordine;
+  // almeno due parole e cinque lettere in tutto (una sola sigla come «S» o «E» non basta)
+  function abbreviato(corto, lungo) {
+    const a = parole(corto), b = parole(lungo);
+    if (a.length < 2 || a.length !== b.length || a.join("").length < 5) return false;
+    return a.every((w, i) => b[i].startsWith(w)) && a.some((w, i) => w !== b[i]);
   }
   // allineamento in ordine (programmazione dinamica): coppie (i, j) di nomi simili
   function allinea(A, B, soglia = 0.72) {
@@ -173,7 +189,7 @@
       if (d.linea_id && /^aperta/i.test(d.stato || "")) lineeDisc.set(d.linea_id, (lineeDisc.get(d.linea_id) || []).concat({ disc_id: d.disc_id, testo: d.testo || "" }));
     if (S) {
       let ultima = null;
-      for (const r of S.righe) {
+      S.righe.forEach((r, ord) => {
         const kms = r.km.map(k => parseFloat(k));
         const cand = [];
         for (const p of punti) {
@@ -217,14 +233,14 @@
           }
         }
         if (r.tipo === "loc" || cand.length) {
-          sequenza.push({ riga: r, cand });
+          sequenza.push({ riga: r, cand, ord });
           if (cand.length) ultima = sequenza.length - 1;   // indice dell'ultima località riconosciuta
         } else if (ultima !== null && r.km.length && !NO_PL.test(r.nome || "")) {
-          const ps = { dopo: ultima, km: r.km[0], n: r.nome };   // indice della località: diventa l'id del passaggio più sotto
+          const ps = { dopo: ultima, km: r.km[0], n: r.nome, ord };   // indice della località: diventa l'id del passaggio più sotto
           for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) ps[k2] = r[k1];
           puntiScheda.push(ps);
         }
-      }
+      });
     } else {
       for (const a_ of Tr.localita) {
         let cand = [];
@@ -246,6 +262,21 @@
     if (mancanti.length) R.push("  Località non presenti nel database (da caricare): " + mancanti.map(m => `${m.nome} (${m.km.join("/")})`).join(", "));
 
     const su = (k, linea) => sequenza[k].cand.find(c => c[1] === linea) || null;
+    // 1.0.48: prossima località riconosciuta sulla linea dopo j. Le località della Scheda NON nel database che stanno
+    // in mezzo non interrompono il tratto se la loro progressiva della Scheda cade fra le due località riconosciute
+    // della stessa linea (es. «Rho Dev.E.L.NO» km 13,963 fra Rho 16,348 e Rho Fiera 12,618): la linea la danno le
+    // due località riconosciute, la riga resta nella scheda come punto della Scheda. Prima il tratto si spezzava e il
+    // generatore si fermava con «itinerario non continuo» (nessun pacchetto).
+    const prossima = (j, linea) => {
+      let k = j + 1;
+      while (k < sequenza.length && !sequenza[k].cand.length) k++;
+      if (k >= sequenza.length || !su(k, linea)) return null;
+      const lo = Math.min(su(j, linea)[2], su(k, linea)[2]), hi = Math.max(su(j, linea)[2], su(k, linea)[2]);
+      for (let x = j + 1; x < k; x++)
+        if (!(sequenza[x].riga.km || []).some(v => lo < parseFloat(v) && parseFloat(v) < hi)) return null;
+      return k;
+    };
+    const saltate = [];   // località non nel database tenute dentro un tratto: [indice, linea]
     const itinerario = [], scheda = {}, estremi = [];   // estremi: indici in «sequenza» di inizio e fine di ogni tratto
     let i = 0, ambigua = null;
     while (i < sequenza.length) {
@@ -255,11 +286,11 @@
       }
       const corse = new Map();
       for (const linea of new Set(sequenza[i].cand.map(c => c[1]))) {
-        let j = i, verso = null;
-        while (j + 1 < sequenza.length && su(j + 1, linea)) {
-          const d = su(j + 1, linea)[2] - su(j, linea)[2];
+        let j = i, verso = null, k;
+        while ((k = prossima(j, linea)) !== null) {
+          const d = su(k, linea)[2] - su(j, linea)[2];
           if (verso !== null && (d > 0) !== verso) break;
-          verso = d > 0; j++;
+          verso = d > 0; j = k;
         }
         corse.set(linea, j);
       }
@@ -275,7 +306,7 @@
           if (j <= i) return false;
           const li = lineaPer.get(l);
           if (!li || !li.senso_pari) return false;
-          const cresce = su(i + 1, l)[2] > su(i, l)[2];
+          const cresce = su(prossima(i, l), l)[2] > su(i, l)[2];
           const senso = cresce === (li.senso_pari === "crescente") ? "pari" : "dispari";
           // tutte le righe con questa località, senso e cifra devono portare alla stessa linea (es. Mi Lambrate pari 3
           // vale per la linea Venezia «dalla Cintura» ma per Mi Greco P. «arrivi dalla VE DD»: ambiguo, non si usa)
@@ -312,6 +343,7 @@
       }
       const linea = scelte[0];
       itinerario.push({ da: su(i, linea)[0], a: su(migliore, linea)[0], linea });
+      for (let x = i + 1; x < migliore; x++) if (!sequenza[x].cand.length) saltate.push([x, linea]);
       estremi.push([i, migliore]);
       i = migliore < sequenza.length - 1 ? migliore : sequenza.length;
     }
@@ -328,7 +360,20 @@
       for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) val[k2] = r[k1];
       if (Object.keys(val).length) scheda[s.id] = val;
     }
-    for (const ps of puntiScheda) ps.dopo = sequenza[ps.dopo].id;
+    // località non nel database tenute dentro un tratto (1.0.48): punto della Scheda dopo l'ultima località riconosciuta
+    for (const [x, linea] of saltate) {
+      const r = sequenza[x].riga;
+      let dopo = x - 1; while (!sequenza[dopo].cand.length) dopo--;
+      const a = su(dopo, linea)[2], b = su(x + 1 + sequenza.slice(x + 1).findIndex(s => s.cand.length), linea)[2];
+      const km = r.km.find(v => Math.min(a, b) < parseFloat(v) && parseFloat(v) < Math.max(a, b));
+      const ps = { dopo, km, n: r.nome, ord: sequenza[x].ord };
+      for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) ps[k2] = r[k1];
+      puntiScheda.push(ps);
+      R.push(`  ~ «${r.nome}» (km ${r.km.join("/")}) non è nel database ma sta fra ${sequenza[dopo].riga.nome} e la località seguente ` +
+        `sulla linea ${linea}: tenuta come punto della Scheda, il tratto prosegue (caricare la località nel database)`);
+    }
+    puntiScheda.sort((p, q) => p.ord - q.ord);
+    for (const ps of puntiScheda) { ps.dopo = sequenza[ps.dopo].id; delete ps.ord; }
     for (let k = 0; k + 1 < itinerario.length; k++)
       if (itinerario[k].a !== itinerario[k + 1].da) R.push(`  ! itinerario non continuo tra ${itinerario[k].a} e ${itinerario[k + 1].da}`);
 

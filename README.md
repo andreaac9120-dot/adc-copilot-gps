@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.44 — versione unica
+# ADC COPILOT 1.0.48 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,16 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.48 (19/11/2026) – il viaggio si genera anche con località della Scheda non riconosciute
+
+Correzione del compositore e del generatore del viaggio (generatore senza IA), dalla Scheda del treno 60755 del 19/11/2026 (Torino Orbassano → Milano Certosa) che non generava nessun pacchetto:
+- **Causa.** Bastava una località intermedia della Scheda non riconosciuta nel database (nome scritto abbreviato, es. «S. Ant. di Sal.», «Rho Dev.E.L.NO», o località non ancora caricata) per spezzare il tratto in due; il generatore trovava l'itinerario «non continuo» e si fermava con «Pacchetto non generato», senza neanche il pacchetto parziale.
+- **Nomi abbreviati parola per parola.** Con la progressiva uguale (± 2 m), un nome della Scheda in cui ogni parola è l'inizio della parola corrispondente del database (stesse parole, stesso ordine, almeno due parole e cinque lettere) vale 0,9: «S. Ant. di Sal.» = S. Antonino / Sant'Antonino di Saluggia. Non supera nomi uguali (1) o con lo stesso inizio (0,95).
+- **Località non nel database dentro un tratto.** Se sta fra due località riconosciute della **stessa linea** e la sua progressiva della Scheda cade fra le loro, il tratto prosegue: la linea la danno le due località riconosciute, la riga resta nella scheda come punto della Scheda (velocità, grado, indicatore) e il rapporto chiede di caricarla nel database.
+- **Vuoto vero nell'itinerario** (località sconosciuta dove cambia la linea): il pacchetto si genera come **ITINERARIO PARZIALE**, con il vuoto nell'intestazione e tra i punti aperti, invece di nessun pacchetto. Un punto della Scheda la cui località di riferimento non è sull'itinerario diventa un punto aperto («non collocato») invece di fermare tutto.
+
+Le stesse regole vanno portate in `lettori/componi_viaggio.py` e nel generatore Python del database dati di linea. Non serve un database nuovo. **Serve rigenerare il viaggio.**
 
 ## 1.0.44 (12/11/2026) – cartina delle linee del database
 
