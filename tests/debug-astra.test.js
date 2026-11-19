@@ -86,8 +86,13 @@ test("F02: destinazione sconosciuta → parziale, segnato nel pacchetto", () => 
 
 test("F02: origine sconosciuta, vuoto intermedio, ambiguità dopo un tratto valido", () => {
   assert.match(comp([["Ignota", "55.000"], ["Alfa", "0.000"], ["Beta", "10.000"]]).lacune.join(), /origine non riconosciuta: Ignota/);
-  const v = comp([["Alfa", "0.000"], ["Beta", "10.000"], ["Ignota", "15.000"], ["Gamma", "20.000"], ["Delta", "30.000"]]);
+  // località sconosciuta con progressiva che non cade fra Beta e Gamma: vuoto (1.0.48: il pacchetto si genera lo stesso, PARZIALE)
+  const v = comp([["Alfa", "0.000"], ["Beta", "10.000"], ["Ignota", "55.000"], ["Gamma", "20.000"], ["Delta", "30.000"]]);
   assert.equal(v.completo, false); assert.match(v.lacune.join(), /vuoto tra Beta e Gamma: Ignota/);
+  const pv = G.genera(T2, v.viaggio, new Date("2026-11-03T08:00:00Z"));
+  assert.match(pv.intestazione.percorso, /PARZIALE/);
+  assert.match(pv.aperti[0].cosa, /vuoto tra Beta e Gamma/);
+  assert.equal(controlla(JSON.parse(JSON.stringify(pv))).length, 0);
   const a = comp([["Alfa", "0.000"], ["Beta", "10.000"], ["Epsilon", "40.000"]]);
   assert.equal(a.completo, false); assert.match(a.lacune.join(), /più linee possibili \(L2, L3\)/);
   assert.equal(a.viaggio.itinerario.length, 1);

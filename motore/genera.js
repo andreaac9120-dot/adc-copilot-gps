@@ -107,7 +107,10 @@
       punti = ordina(punti, cresce ? ((x, y) => x.km - y.km) : ((x, y) => y.km - x.km));
       tratti.push({ lettera: String.fromCharCode(65 + i), linea, senso, da, a, col: t.colonna_sigle, sigla: t.sigla, km_da: pDa.km, km_a: pA.km, lo, hi, cresce, punti, ultimo: i === V.itinerario.length - 1 });
       usa(linea.fonte);
-      if (i && tratti[i - 1].a !== da) throw new Errore(`itinerario non continuo: ${tratti[i - 1].a} → ${da}`);
+      // 1.0.48: itinerario con un vuoto (località della Scheda non nel database): il compositore lo segna come PARZIALE
+      // (copertura.lacune); il pacchetto si genera lo stesso, con il vuoto tra i punti aperti. Prima: nessun pacchetto.
+      if (i && tratti[i - 1].a !== da && !(V.copertura && V.copertura.completa === false))
+        throw new Errore(`itinerario non continuo: ${tratti[i - 1].a} → ${da}`);
     });
 
     // ------------------------------------------------------------- righe R
@@ -154,7 +157,13 @@
     }
     for (const pt of (V.punti_scheda || []).slice().reverse()) {
       const pos = R.findIndex(r => r.id === pt.dopo);
-      if (pos < 0) throw new Errore(`punto della Scheda «${pt.n}» dopo ${pt.dopo}: località non nella scheda`);
+      // 1.0.48: località di riferimento fuori dall'itinerario (es. in un vuoto di un itinerario parziale): il punto
+      // non si colloca e resta tra i punti aperti, invece di fermare tutto il pacchetto
+      if (pos < 0) {
+        aperti.push({ cosa: `Punto della Scheda Treno «${pt.n}» km ${pt.km}${pt.v ? ` (${pt.v} km/h)` : ""} non collocato: la località che lo precede non è sull'itinerario ricostruito`,
+          motivo: "da_studiare", richiesta: `STUDIA SOLO punto della Scheda Treno «${pt.n}» km ${pt.km} – ${TRENO}` });
+        continue;
+      }
       const riga = { km: pt.km, n: pt.n, t: "pt", s: R[pos].s, _kl: { [R[pos].s]: parseFloat(pt.km) } };
       for (const k of ["g", "v", "ind"]) if (pt[k]) riga[k] = String(pt[k]);
       R.splice(pos + 1, 0, riga);
