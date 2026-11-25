@@ -278,14 +278,66 @@
     };
     const saltate = [];   // località non nel database tenute dentro un tratto: [indice, linea]
     const itinerario = [], scheda = {}, estremi = [];   // estremi: indici in «sequenza» di inizio e fine di ogni tratto
+
+    // 1.0.49: GIUNZIONE fra due linee in un punto che la Scheda non stampa (Scheda 67069/68918 del 25/11/2026:
+    // Alessandria – Ponte Tanaro 89,420 sulla linea «Cippo 88,52 – Alessandria», Solero 81,843 sulla linea «Torino P.N. –
+    // Alessandria»; le due linee del database si uniscono al Cippo km 88,52, che la Scheda non riporta: prima vuoto e
+    // ITINERARIO PARZIALE). Il passaggio dalla linea A di i alla linea B della località riconosciuta seguente k si
+    // ricostruisce solo se TUTTE queste condizioni valgono, altrimenti il vuoto resta:
+    //  - fra i e k non c'è nessuna località della Scheda non riconosciuta, e k non è sulla linea A;
+    //  - nel database A e B hanno una località comune g (diversa da i e k) con la STESSA progressiva sulle due linee
+    //    (± 2 m): la Scheda stampa le progressive doppie, quindi un cambio di numerazione non stampato non si indovina;
+    //  - i → g su A e g → k su B vanno nello stesso senso, che è anche quello del tratto che arriva a i su A;
+    //  - ogni riga della Scheda fra i e k (cippi, deviatoi…) ha una progressiva sul percorso i → g → k;
+    //  - la giunzione è una sola.
+    // Il passaggio è segnato RICOSTRUITO, da confermare sul FL.
+    const kmPunto = new Map();
+    for (const p of punti) { const key = p.linea_id + "\u0000" + p.loc_id; if (!kmPunto.has(key)) kmPunto.set(key, p.km); }
+    const kmSu = (linea, loc) => kmPunto.get(linea + "\u0000" + loc);
+    const lineeDi = new Map();
+    for (const p of punti) { if (!lineeDi.has(p.loc_id)) lineeDi.set(p.loc_id, new Set()); lineeDi.get(p.loc_id).add(p.linea_id); }
+    const giunzione = i => {
+      const k = i + 1;
+      if (k >= sequenza.length || !sequenza[k].cand.length || !S) return null;
+      const ordI = sequenza[i].ord, ordK = sequenza[k].ord;
+      const inMezzo = S.righe.slice(ordI + 1, ordK).filter(r => r.km.length && !NO_PL.test(r.nome || ""));
+      const tra = (v, a, b) => Math.min(a, b) - 0.002 - 1e-9 <= v && v <= Math.max(a, b) + 0.002 + 1e-9;
+      const ultimo = itinerario[itinerario.length - 1];
+      const trovate = [];
+      for (const A of new Set(sequenza[i].cand.map(c => c[1]))) {
+        if (su(k, A)) continue;
+        const kAi = su(i, A)[2], locI = su(i, A)[0];
+        let versoPrima = null;
+        if (ultimo && ultimo.linea === A && ultimo.a === locI) versoPrima = kAi > kmSu(A, ultimo.da);
+        for (const B of new Set(sequenza[k].cand.map(c => c[1]))) {
+          if (B === A) continue;
+          const kBk = su(k, B)[2], locK = su(k, B)[0];
+          for (const [g, linee] of lineeDi) {
+            if (g === locI || g === locK || !linee.has(A) || !linee.has(B)) continue;
+            const kAg = kmSu(A, g), kBg = kmSu(B, g);
+            if (Math.abs(kAg - kBg) > 0.002 + 1e-9) continue;
+            const dA = kAg - kAi, dB = kBk - kBg;
+            if (Math.abs(dA) <= 1e-9 || Math.abs(dB) <= 1e-9 || (dA > 0) !== (dB > 0)) continue;
+            if (versoPrima !== null && versoPrima !== (dA > 0)) continue;
+            if (!inMezzo.every(r => r.km.some(v => tra(parseFloat(v), kAi, kAg) || tra(parseFloat(v), kBg, kBk)))) continue;
+            trovate.push({ A, B, g, k, kAg });
+          }
+        }
+      }
+      return trovate.length === 1 ? trovate[0] : null;
+    };
+    let ingresso = null;   // giunzione appena ricostruita: il tratto da k parte da g sulla linea B
+
     let i = 0, ambigua = null;
     while (i < sequenza.length) {
       if (!sequenza[i].cand.length) {
         if (itinerario.length) R.push(`  ! itinerario interrotto: «${sequenza[i].riga.nome}» non è nel database`);
         i++; continue;
       }
+      const forzata = ingresso && ingresso.k === i ? ingresso : null;
+      ingresso = null;
       const corse = new Map();
-      for (const linea of new Set(sequenza[i].cand.map(c => c[1]))) {
+      for (const linea of forzata ? [forzata.B] : new Set(sequenza[i].cand.map(c => c[1]))) {
         let j = i, verso = null, k;
         while ((k = prossima(j, linea)) !== null) {
           const d = su(k, linea)[2] - su(j, linea)[2];
@@ -296,7 +348,23 @@
       }
       let migliore = Math.max(...corse.values());
       let scelte = [...corse].filter(([, j]) => j === migliore).map(([l]) => l);
-      if (migliore === i) { i++; continue; }
+      if (migliore === i) {
+        if (forzata) {   // giunzione: la linea B arriva a k ma non prosegue oltre, il tratto è g → k
+          itinerario.push({ da: forzata.g, a: su(i, forzata.B)[0], linea: forzata.B });
+          estremi.push([forzata.ig, i]);
+          continue;   // da k si riparte normalmente
+        }
+        const gz = giunzione(i);
+        if (!gz) { i++; continue; }
+        const locI = su(i, gz.A)[0], ultimo = itinerario[itinerario.length - 1];
+        if (ultimo && ultimo.linea === gz.A && ultimo.a === locI) ultimo.a = gz.g;   // il tratto su A arriva fino a g
+        else { itinerario.push({ da: locI, a: gz.g, linea: gz.A }); estremi.push([i, i]); }
+        R.push(`  ~ ${sequenza[i].riga.nome} → ${sequenza[gz.k].riga.nome}: passaggio dalla linea ${gz.A} alla linea ${gz.B} a ` +
+          `${(locPer.get(gz.g) || {}).nome || gz.g} km ${C.fg(gz.kAg)}, punto comune delle due linee non stampato nella Scheda: ` +
+          `RICOSTRUITO, da confermare sul FL`);
+        ingresso = Object.assign({ ig: i }, gz);
+        i = gz.k; continue;
+      }
       // 1.0.43: indicatore di partenza stampato nella Scheda (colonna Simbologia) + tabella «indicatori» del database
       // (località, senso, cifra → linea): se porta a una sola delle linee che proseguono, vale quella.
       // Es. 41501: Pioltello Limito indicatore 2 in dispari = linea VE AV/AC verso Melzo Scalo (FL 29 p.62).
@@ -342,9 +410,9 @@
         break;
       }
       const linea = scelte[0];
-      itinerario.push({ da: su(i, linea)[0], a: su(migliore, linea)[0], linea });
+      itinerario.push({ da: forzata ? forzata.g : su(i, linea)[0], a: su(migliore, linea)[0], linea });
       for (let x = i + 1; x < migliore; x++) if (!sequenza[x].cand.length) saltate.push([x, linea]);
-      estremi.push([i, migliore]);
+      estremi.push([forzata ? forzata.ig : i, migliore]);
       i = migliore < sequenza.length - 1 ? migliore : sequenza.length;
     }
     // Valori della Scheda per PASSAGGIO (F01): una località attraversata più volte ha id loc_1, loc_2, …
