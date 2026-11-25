@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.48 — versione unica
+# ADC COPILOT 1.0.49 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,15 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.49 (25/11/2026) – cambio di linea in un punto che la Scheda non stampa
+
+Correzione del compositore del viaggio (`motore/componi.js`), dalla Scheda del treno 67069/68918 del 25/11/2026 (Busto Arsizio → Modane), generata come **ITINERARIO PARZIALE** con un vuoto tra Ponte Tanaro e Solero:
+- **Causa.** Nel database la Torino P.N. – Alessandria è divisa in due linee che si uniscono al Cippo km 88,52: Ponte Tanaro (89,420) sta sulla linea «Cippo 88,52 – Alessandria», Solero (81,843) sulla «Torino P.N. – Alessandria». Il motore cambiava linea solo in una località stampata nella Scheda e presente su tutte e due le linee; la Scheda quel cippo non lo stampa (fra le due c'è solo «Cippo 89.000», il cambio di velocità) e il percorso si spezzava.
+- **Giunzione ricostruita.** Quando la località riconosciuta seguente non è sulla linea di quella attuale, il passaggio si fa nel punto comune delle due linee del database se: fra le due non c'è nessuna località della Scheda non riconosciuta; il punto comune ha la **stessa progressiva** sulle due linee (± 2 m: un cambio di numerazione non stampato non si indovina); il senso di marcia resta lo stesso, anche rispetto al tratto che arriva; ogni riga della Scheda in mezzo (cippi, deviatoi) ha una progressiva sul percorso; la giunzione possibile è **una sola**. Il rapporto la segna **RICOSTRUITO, da confermare sul FL**. Altrimenti il vuoto resta come prima.
+- **Non è del motore** l'altro vuoto della stessa Scheda, tra Bussoleno e Salbertrand: P.C. Meana (7,650), Chiomonte (15,079) ed Exilles (21,992) stanno sulla progressiva che riparte da 0 a Bussoleno (Salbertrand 25,945), che nel database non c'è (la linea ha solo Bussoleno 43,166 – Salbertrand 66,809). Va caricata nel database dal FL della Torino – Modane.
+
+Prove in `tests/scheda-67069.test.js` (dati inventati). La stessa regola va portata in `lettori/componi_viaggio.py` del database dati di linea. Non serve un database nuovo. **Serve rigenerare il viaggio.**
 
 ## 1.0.48 (19/11/2026) – il viaggio si genera anche con località della Scheda non riconosciute
 
