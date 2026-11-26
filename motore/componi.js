@@ -256,6 +256,80 @@
       }
     }
 
+    // 1.0.50: TRATTO CON PROGRESSIVA LOCALE della Scheda (Scheda 67069/68918 del 25/11/2026, FL 2 Torino p.128 e p.212:
+    // il solo binario pari Bussoleno – Salbertrand ha progressive proprie, Bussoleno 43,166/0,000 → P.C. Meana 7,650 →
+    // Chiomonte 15,079 → Exilles 21,992 → Salbertrand 25,945/66,809). Il database (m38) tiene di proposito quel tratto
+    // sulla linea Modane – Q. Zappata con le progressive del binario di sinistra in senso dispari (Meana 50,523 …),
+    // quindi le località intermedie non erano riconosciute e l'itinerario restava PARZIALE. Fra due località riconosciute
+    // a e b della stessa linea L, le località intermedie si abbinano per nome alle località di L solo se TUTTE valgono:
+    //  - la Scheda stampa la progressiva doppia in a (la prima è di L, l'ultima no: si passa al riferimento locale) e in
+    //    b (l'ultima è di L, la prima no: si torna su L);
+    //  - ogni località intermedia ha una progressiva dentro il riferimento locale, in ordine, e il nome (≥ 0,8, il più
+    //    simile e una sola località) di una località di L fra a e b, nello stesso ordine lungo L;
+    //  - ogni altra riga della Scheda fra a e b ha la progressiva nel riferimento locale o su L fra a e b;
+    //  - la linea che soddisfa tutto è una sola.
+    // Le località abbinate prendono la progressiva del database (L); il rapporto le segna RICOSTRUITE, da confermare sul FL.
+    const vicino = (x, y) => Math.abs(x - y) <= 0.002 + 1e-9;
+    const dentro = (v, x, y) => Math.min(x, y) - 1e-9 <= v && v <= Math.max(x, y) + 1e-9;
+    const tratLocali = [];   // [a, b, L, inizio e fine del riferimento locale]
+    if (S) for (let a = 0; a < sequenza.length; a++) {
+      if (!sequenza[a].cand.length) continue;
+      let b = a + 1; while (b < sequenza.length && !sequenza[b].cand.length) b++;
+      if (b >= sequenza.length || b === a + 1) continue;
+      const ka = (sequenza[a].riga.km || []).map(parseFloat), kb = (sequenza[b].riga.km || []).map(parseFloat);
+      if (ka.length < 2 || kb.length < 2) continue;
+      const loc0 = ka[ka.length - 1], loc1 = kb[0];
+      if (vicino(loc0, loc1)) continue;
+      const trovate = [];
+      for (const L of new Set(sequenza[a].cand.map(c => c[1]))) {
+        const pa = sequenza[a].cand.find(c => c[1] === L), pb = sequenza[b].cand.find(c => c[1] === L);
+        if (!pb || vicino(pa[2], pb[2])) continue;
+        if (!vicino(pa[2], ka[0]) || vicino(pa[2], loc0)) continue;                 // in a si lascia L
+        if (!vicino(pb[2], kb[kb.length - 1]) || vicino(pb[2], loc1)) continue;     // in b si torna su L
+        const cresceL = pb[2] > pa[2], cresceLoc = loc1 > loc0;
+        const avanti = (da, x, cresce) => (cresce ? x > da + 1e-9 : x < da - 1e-9);
+        const abbinate = [];
+        let ok = true, ultL = pa[2], ultLoc = loc0;
+        for (let x = a + 1; x < b && ok; x++) {
+          const r = sequenza[x].riga;
+          const kl = (r.km || []).map(parseFloat).find(v => avanti(ultLoc, v, cresceLoc) && dentro(v, loc0, loc1));
+          if (kl === undefined) { ok = false; break; }
+          const vicini = punti.filter(p => p.linea_id === L && avanti(ultL, p.km, cresceL) && avanti(p.km, pb[2], cresceL))
+            .map(p => [p, Math.max(...nomiDb(locPer.get(p.loc_id)).map(n => simile(r.nome, n)))]).filter(([, s_]) => s_ >= 0.8);
+          const smax = Math.max(0, ...vicini.map(([, s_]) => s_));
+          const migliori = vicini.filter(([, s_]) => s_ >= smax - 1e-9);
+          if (!migliori.length || new Set(migliori.map(([p]) => p.loc_id)).size !== 1 || migliori.length !== 1) { ok = false; break; }
+          const p = migliori[0][0];
+          abbinate.push([x, p, kl]); ultL = p.km; ultLoc = kl;
+        }
+        if (!ok) continue;
+        const altre = S.righe.slice(sequenza[a].ord + 1, sequenza[b].ord)
+          .filter(r => r.km.length && !NO_PL.test(r.nome || "") && !abbinate.some(([x]) => sequenza[x].riga === r));
+        if (!altre.every(r => r.km.some(v => dentro(parseFloat(v), loc0, loc1) || dentro(parseFloat(v), pa[2], pb[2])))) continue;
+        trovate.push({ L, abbinate, pa, pb });
+      }
+      if (trovate.length !== 1) continue;
+      const { L, abbinate, pa, pb } = trovate[0];
+      for (const [x, p, kl] of abbinate) {
+        sequenza[x].cand = [[p.loc_id, L, p.km]];
+        R.push(`  ~ ${sequenza[x].riga.nome} (km ${C.fg(kl)} della Scheda, progressiva locale fra ${sequenza[a].riga.nome} e ` +
+          `${sequenza[b].riga.nome}) = ${p.nome} km ${C.fg(p.km)} della linea ${L}: RICOSTRUITA, da confermare sul FL`);
+      }
+      tratLocali.push([a, b, L, loc0, loc1, pa[2], pb[2], abbinate.map(([x, , kl]) => [x, kl])]);
+      a = b - 1;
+    }
+    // i punti della Scheda dentro un tratto con progressiva locale seguono l'ultima località riconosciuta che li precede;
+    // la progressiva locale non è della linea: il punto non si colloca su L (niente km per le prescrizioni)
+    for (const [a, b, , loc0, loc1, kmA, kmB] of tratLocali)
+      for (const ps of puntiScheda) {
+        if (ps.ord <= sequenza[a].ord || ps.ord >= sequenza[b].ord) continue;
+        let d = sequenza.findIndex(s => s.ord > ps.ord) - 1; if (d < 0) d = sequenza.length - 1;
+        while (d > a && !sequenza[d].cand.length) d--;
+        ps.dopo = d;
+        const v = parseFloat(ps.km);
+        if (dentro(v, loc0, loc1) && !dentro(v, kmA, kmB)) ps.km_locale = true;
+      }
+
     const ric = sequenza.filter(s => s.cand.length);
     R.push(`DATABASE: località riconosciute ${ric.length} su ${sequenza.length}`);
     const mancanti = sequenza.filter(s => !s.cand.length).map(s => s.riga);
@@ -536,6 +610,12 @@
       }
     }
 
+    // 1.0.50: tratti con progressiva locale della Scheda, per collocare i cippi dei moduli (M3) su quella progressiva
+    const progressiveLocali = tratLocali.map(([a, b, L, loc0, loc1, , , abb]) => {
+      const punti_ = { [sequenza[a].id]: loc0, [sequenza[b].id]: loc1 };
+      for (const [x, kl] of abb) punti_[sequenza[x].id] = kl;
+      return { linea: L, nome: `${sequenza[a].riga.nome} ${C.fg(loc0)} – ${sequenza[b].riga.nome} ${C.fg(loc1)}`, km_da: loc0, km_a: loc1, punti: punti_ };
+    });
     const viaggio = {
       treno: Tr.treni.length ? Tr.treni[0] : "?",
       treno_testo: Tr.treni.join("/"),
@@ -547,6 +627,7 @@
       input: { tipo: S ? "scheda_treno" : "traccia", fase: S ? "completa" : "fase1_traccia",
         descrizione: "composto dal motore della PWA (" + (Tr.da_scheda ? "" : "traccia Softrail") + (S && !Tr.da_scheda ? " + " : "") + (S ? "Scheda Treno PDF" : "") + ")" },
       itinerario, copertura: { completa: completo, lacune }, discrepanze, scheda, punti_scheda: puntiScheda,
+      progressive_locali: progressiveLocali,
       prescrizioni: S ? { riepilogo: S.riepilogo === undefined ? null : S.riepilogo, moduli: S.moduli || [],
         fonte: `Scheda Treno SKT-M3M40 valida per il ${S.intestazione.valida_per || "?"}, moduli richiamati` } : null
     };
