@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.49 — versione unica
+# ADC COPILOT 1.0.50 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,16 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.50 (26/11/2026) – tratto con progressiva locale della Scheda (binario pari Bussoleno – Salbertrand)
+
+Correzione del compositore (`motore/componi.js`) e del generatore (`motore/genera.js`), dalla stessa Scheda 67069/68918 del 25/11/2026, rimasta PARZIALE fra Bussoleno e Salbertrand:
+- **Causa.** Sul solo binario pari Bussoleno – Salbertrand il FL 2 TO (p.128 e Sigle p.212) stampa progressive proprie: Bussoleno 43,166/**0,000**, P.C. Meana 7,650, Chiomonte 15,079, Exilles 21,992, Salbertrand **25,945**/66,809. Il database, per scelta della migrazione m38 (niente linea a sé, per non rendere ambiguo l'instradamento), tiene quel tratto sulla linea Modane – Q. Zappata con le progressive del senso dispari (Meana 50,523, Chiomonte 57,097, Exilles 63,070): le tre località non erano riconosciute.
+- **Regola.** Fra due località riconosciute della stessa linea, le località intermedie si abbinano **per nome** a quelle della linea solo se: la Scheda stampa la progressiva doppia all'inizio (si lascia la linea) e alla fine (si torna sulla linea); ogni località intermedia ha la progressiva dentro il riferimento locale, in ordine, e il nome (≥ 0,8, il più simile, una sola) di una località della linea fra le due, nello stesso ordine; ogni altra riga della Scheda in mezzo sta nel riferimento locale o su quello della linea; la linea possibile è una sola. Il rapporto segna le località **RICOSTRUITE, da confermare sul FL**. Nella scheda di condotta le località mostrano la progressiva del database; i punti della Scheda (cippi) restano come stampati.
+- **Rallentamenti sulla progressiva locale.** Un M3 con il cippo nel riferimento locale (es. «Chiomonte cippo 14» sul binario pari) si colloca fra le località del tratto con le loro progressive della Scheda, non sulla progressiva della linea (che lo avrebbe messo vicino ad Alpignano). Il viaggio porta i tratti locali in `progressive_locali`.
+- **Correzione alla 1.0.49.** Il vuoto Ponte Tanaro – Solero della stessa Scheda non era una giunzione non stampata ma un punto mancante nel database: Ponte Tanaro 89,420 sulla Torino P.N. – Alessandria (stampato nelle Sigle del FL 3), aggiunto con la migrazione **m152** del database. La regola della 1.0.49 resta (prudente, non cambia gli altri viaggi).
+
+Prova sul database vero (con m152) e sulla Scheda reale: 78 località su 78, itinerario completo in 14 tratti, pacchetto VALIDO (validatore 1.0.4, 0 errori). Prove in `tests/progressiva-locale.test.js` (dati inventati). La stessa regola va portata in `lettori/componi_viaggio.py` del database. **Serve aggiornare il database (m152) e rigenerare il viaggio.**
 
 ## 1.0.49 (25/11/2026) – cambio di linea in un punto che la Scheda non stampa
 

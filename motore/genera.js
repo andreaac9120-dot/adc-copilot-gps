@@ -164,7 +164,9 @@
           motivo: "da_studiare", richiesta: `STUDIA SOLO punto della Scheda Treno «${pt.n}» km ${pt.km} – ${TRENO}` });
         continue;
       }
-      const riga = { km: pt.km, n: pt.n, t: "pt", s: R[pos].s, _kl: { [R[pos].s]: parseFloat(pt.km) } };
+      // 1.0.50: progressiva locale della Scheda (es. binario pari Bussoleno – Salbertrand): mostrata come stampata,
+      // ma non è della linea del tratto e non serve a collocare le prescrizioni
+      const riga = { km: pt.km, n: pt.n, t: "pt", s: R[pos].s, _kl: pt.km_locale ? {} : { [R[pos].s]: parseFloat(pt.km) } };
       for (const k of ["g", "v", "ind"]) if (pt[k]) riga[k] = String(pt[k]);
       R.splice(pos + 1, 0, riga);
     }
@@ -504,7 +506,19 @@
         }
       }
       let leg, pos, dove;
-      if (cippo !== null) {
+      // 1.0.50: cippo della progressiva locale della Scheda (es. M3 «Chiomonte cippo 14» sul binario pari Bussoleno –
+      // Salbertrand, progressive 0,000–25,945): si colloca fra le località del tratto locale con le loro progressive
+      // della Scheda, non sulla progressiva della linea (che porterebbe il km 14 vicino ad Alpignano)
+      const pl = cippo === null ? null : (V.progressive_locali || []).find(t => t.punti && Object.prototype.hasOwnProperty.call(t.punti, R[i0].id) &&
+        Math.min(t.km_da, t.km_a) - 1e-9 <= cippo && cippo <= Math.max(t.km_da, t.km_a) + 1e-9);
+      if (pl) {
+        const cresce = pl.km_a > pl.km_da, lungoL = k => (cresce ? k - pl.km_da : pl.km_da - k);
+        const idx = R.map((x, i) => [x, i]).filter(([x]) => x.t === "loc" && Object.prototype.hasOwnProperty.call(pl.punti, x.id)).map(([, i]) => i);
+        const prima = idx.filter(i => lungoL(pl.punti[R[i].id]) <= lungoL(cippo) + 1e-9);
+        pos = prima.length ? Math.max(...prima) + 1 : i0 + 1;
+        leg = R[pos - 1].s || R[i0].s;
+        dove = `cippo km ${fg(cippo)} della progressiva locale della Scheda (${pl.nome}), tratto ${leg}`;
+      } else if (cippo !== null) {
         let best = cand[0];
         for (const c of cand) if (Math.abs(c[1] - cippo) < Math.abs(best[1] - cippo)) best = c;
         leg = best[0];
