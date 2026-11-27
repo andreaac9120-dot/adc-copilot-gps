@@ -116,7 +116,12 @@
     const R = [], discrepanze = [];
     const locDb = T.localita;
     const locPer = new Map(locDb.map(l => [l.loc_id, l]));
-    const punti = T.punti_linea.filter(p => locPer.has(p.loc_id)).map(p => Object.assign({}, p, { nome: locPer.get(p.loc_id).nome }));
+    // 1.0.51 (D04 del debug di Astra, 27/11/2026): oltre alla progressiva del database (che per pochi punti è una
+    // coordinata interna di ordinamento, es. Torino P.N. −1,092 sulla P.N. – Zappata) vale la progressiva STAMPATA
+    // (km_txt, es. 0,000), quella che riporta la Scheda
+    const kmStampato = t => (/^\s*-?\d+(?:[.,]\d+)?\s*$/.test(String(t == null ? "" : t)) ? parseFloat(String(t).replace(",", ".")) : null);
+    const punti = T.punti_linea.filter(p => locPer.has(p.loc_id)).map(p => Object.assign({}, p, { nome: locPer.get(p.loc_id).nome, kmT: kmStampato(p.km_txt) }));
+    const kmUguale = (p, k) => Math.abs(p.km - k) <= 0.002 + 1e-9 || (p.kmT !== null && Math.abs(p.kmT - k) <= 0.002 + 1e-9);
     const nomiDb = r => [r.nome].concat((r.alias || "").split("|").filter(a => a));
 
     if (Tr.da_scheda) {
@@ -184,26 +189,46 @@
     // riconoscimento nel database
     const sequenza = [], puntiScheda = [];
     const lineaPer = new Map((T.linee || []).map(l => [l.linea_id, l]));
-    const lineeDisc = new Map();   // linea → discrepanze aperte (1.0.43)
-    for (const d of (T.discrepanze || []))
-      if (d.linea_id && /^aperta/i.test(d.stato || "")) lineeDisc.set(d.linea_id, (lineeDisc.get(d.linea_id) || []).concat({ disc_id: d.disc_id, testo: d.testo || "" }));
+    // linea → discrepanze aperte (1.0.43) e, dalla 1.0.51 (D06), chiuse come «refuso stampato» (regola A dell'utente:
+    // vale la progressiva delle principali, le Sigle e la Scheda possono stampare l'altra, es. Varallo 54,095/54,098)
+    const lineeDisc = new Map();
+    for (const d of (T.discrepanze || [])) {
+      const aperta = /^aperta/i.test(d.stato || "");
+      if (d.linea_id && (aperta || /refuso stampato/i.test(d.testo || "")))
+        lineeDisc.set(d.linea_id, (lineeDisc.get(d.linea_id) || []).concat({ disc_id: d.disc_id, testo: d.testo || "", aperta }));
+    }
+    const annunci = [];   // 1.0.51 (D09): righe RICOSTRUITE annunciate solo se il viaggio le usa
     if (S) {
       let ultima = null;
       S.righe.forEach((r, ord) => {
         const kms = r.km.map(k => parseFloat(k));
         const cand = [];
         for (const p of punti) {
-          if (kms.some(k => Math.abs(p.km - k) <= 0.002 + 1e-9)) {
+          if (kms.some(k => kmUguale(p, k))) {
             const l = locPer.get(p.loc_id);
             let sim = Math.max(...nomiDb(l).map(n => simile(r.nome, n)));
             if (r.nome_traccia) sim = Math.max(sim, Math.max(...nomiDb(l).map(n => simile(r.nome_traccia, n))));
-            if (sim >= 0.6) cand.push([p.loc_id, p.linea_id, p.km, sim]);
+            // 1.0.51: la sola progressiva stampata (km_txt) vale con il nome quasi uguale
+            const soloStampata = !kms.some(k => Math.abs(p.km - k) <= 0.002 + 1e-9);
+            if (sim >= (soloStampata ? 0.8 : 0.6)) cand.push([p.loc_id, p.linea_id, p.km, sim]);
           }
+        }
+        // 1.0.51: un nome poco simile (< 0,8) alla stessa progressiva non vale se la Scheda nomina esattamente un'altra
+        // località del database (es. «TORINO SM. NORD 0,000» non è Torino P. Nuova 0,000, 0,67)
+        if (cand.length && Math.max(...cand.map(c => c[3])) < 0.8) {
+          const presi = new Set(cand.map(c => c[0]));
+          if (locDb.some(l => !presi.has(l.loc_id) && nomiDb(l).some(n => simile(r.nome, n) >= 0.95))) cand.length = 0;
         }
         // a parità di progressiva vince il nome più simile (es. «MILANO ROGORED» 0,000 non è Mi Smistamento 0,000)
         if (cand.length) {
           const smax = Math.max(...cand.map(c => c[3]));
           const tenuti = cand.filter(c => c[3] >= smax - 1e-9).map(c => c.slice(0, 3));
+          cand.length = 0; cand.push(...tenuti);
+        }
+        // 1.0.51 (D01): un punto (cippo, deviatoio…) con la progressiva doppia è quello del database solo se coincidono
+        // TUTTE le progressive stampate (es. «Cippo 0,000/14,000» della Casale – Valenza non è il Cippo 0,000/88,522)
+        if (r.tipo === "pt" && kms.length >= 2) {
+          const tenuti = cand.filter(c => kms.every(k => punti.some(p => p.loc_id === c[0] && kmUguale(p, k))));
           cand.length = 0; cand.push(...tenuti);
         }
         // 1.0.43: progressiva della Scheda diversa da quella del database su una linea con DISCREPANZA APERTA
@@ -221,14 +246,16 @@
             if (!disc.length) continue;
             const l = locPer.get(p.loc_id);
             const sim = Math.max(...nomiDb(l).map(n => simile(r.nome, n)));
-            if (sim >= 0.9 && (!cand.length || cand.some(c => c[0] === p.loc_id))) approx.push([p.loc_id, p.linea_id, p.km, sim, disc.map(d => d.disc_id)]);
+            if (sim >= 0.9 && (!cand.length || cand.some(c => c[0] === p.loc_id))) approx.push([p.loc_id, p.linea_id, p.km, sim, disc]);
           }
           if (approx.length) {
             const smax = Math.max(...approx.map(c => c[3]));
             for (const c of approx.filter(c => c[3] >= smax - 1e-9)) {
               cand.push([c[0], c[1], c[2], true]);
-              R.push(`  ~ ${r.nome} (km ${r.km.join("/")}) = ${locPer.get(c[0]).nome} km ${C.fg(c[2])} della linea ${c[1]}: progressiva diversa, ` +
-                `discrepanza aperta ${c[4].join(", ")}: RICOSTRUITA, da confermare sul FL`);
+              const testoDisc = c[4].every(d => d.aperta) ? `discrepanza aperta ${c[4].map(d => d.disc_id).join(", ")}`
+                : `discrepanza ${c[4].map(d => (d.aperta ? d.disc_id : `${d.disc_id} (chiusa: refuso stampato)`)).join(", ")}`;
+              annunci.push({ riga: r, linea: c[1], testo: `  ~ ${r.nome} (km ${r.km.join("/")}) = ${locPer.get(c[0]).nome} km ${C.fg(c[2])} della linea ${c[1]}: progressiva diversa, ` +
+                `${testoDisc}: RICOSTRUITA, da confermare sul FL` });
             }
           }
         }
@@ -253,6 +280,54 @@
             cand = cand.concat(punti.filter(p => p.loc_id === l.loc_id).map(p => [p.loc_id, p.linea_id, p.km]));
         }
         sequenza.push({ riga: { nome: a_, km: [] }, cand });
+      }
+    }
+
+    // 1.0.51 (D01, D02 del debug di Astra, 27/11/2026): DEVIAZIONE ISOLATA. Una riga della Scheda riconosciuta solo su
+    // linee diverse da quella della località riconosciuta precedente, che sta fra due località riconosciute p e n di
+    // una stessa linea L con una sua progressiva stampata fra quelle di p e n su L, non porta il treno su un'altra linea:
+    // la riga resta un punto della Scheda sulla linea L (es. «Cippo 30,000» fra Lanzo e Balangero sulla Ceres – Torino
+    // non è il Cippo 30/23 della Pavia – Rogoredo; «To Stura Orig.AV 12,347» sulla Storica non porta sull'accesso AV,
+    // tolto dalla Storica con m54). Le decisioni si prendono tutte sulla sequenza di partenza, poi si applicano.
+    if (S) {
+      const conCand = sequenza.map((s_, k) => (s_.cand.length ? k : -1)).filter(k => k >= 0);
+      const deviate = [];
+      for (let q = 1; q + 1 < conCand.length; q++) {
+        const p = conCand[q - 1], x = conCand[q], n = conCand[q + 1];
+        const lx = new Set(sequenza[x].cand.map(c => c[1]));
+        if (sequenza[p].cand.some(c => lx.has(c[1]))) continue;
+        const L = [...new Set(sequenza[p].cand.map(c => c[1]))].find(l => {
+          if (lx.has(l)) return false;
+          const cp = sequenza[p].cand.find(c => c[1] === l), cn = sequenza[n].cand.find(c => c[1] === l);
+          return cn && Math.abs(cp[2] - cn[2]) > 1e-9 &&
+            sequenza[x].riga.km.some(v => Math.min(cp[2], cn[2]) < parseFloat(v) && parseFloat(v) < Math.max(cp[2], cn[2]));
+        });
+        if (L) deviate.push([x, L, p, n, [...lx]]);
+      }
+      for (const [x, L, p, n, lx] of deviate) {
+        const r = sequenza[x].riga;
+        R.push(`  ~ «${r.nome}» (km ${r.km.join("/")}) è nel database solo sulla linea ${lx.sort().join(", ")}, ma sta fra ` +
+          `${sequenza[p].riga.nome} e ${sequenza[n].riga.nome} della linea ${L} con la progressiva fra le loro: ` +
+          `tenuta come punto della Scheda sulla linea ${L} (RICOSTRUITO, da confermare sul FL)`);
+        sequenza[x].cand = []; sequenza[x].fuoriLinea = true;
+      }
+      // i punti (non località) deviati escono dalla sequenza e diventano punti della Scheda
+      for (const [x] of deviate.slice().reverse()) {
+        const s_ = sequenza[x], r = s_.riga;
+        if (r.tipo === "loc") continue;
+        sequenza.splice(x, 1);
+        const ps = { dopo: -1, km: r.km[0], n: r.nome, ord: s_.ord };
+        for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) ps[k2] = r[k1];
+        puntiScheda.push(ps);
+      }
+      if (deviate.length) {   // ogni punto della Scheda segue l'ultima località riconosciuta che lo precede
+        for (const ps of puntiScheda) {
+          let d = -1;
+          sequenza.forEach((s_, k) => { if (s_.cand.length && s_.ord < ps.ord) d = k; });
+          ps.dopo = d;
+        }
+        for (let k = puntiScheda.length - 1; k >= 0; k--) if (puntiScheda[k].dopo < 0) puntiScheda.splice(k, 1);
+        puntiScheda.sort((a_, b_) => a_.ord - b_.ord);
       }
     }
 
@@ -332,7 +407,7 @@
 
     const ric = sequenza.filter(s => s.cand.length);
     R.push(`DATABASE: località riconosciute ${ric.length} su ${sequenza.length}`);
-    const mancanti = sequenza.filter(s => !s.cand.length).map(s => s.riga);
+    const mancanti = sequenza.filter(s => !s.cand.length && !s.fuoriLinea).map(s => s.riga);
     if (mancanti.length) R.push("  Località non presenti nel database (da caricare): " + mancanti.map(m => `${m.nome} (${m.km.join("/")})`).join(", "));
 
     const su = (k, linea) => sequenza[k].cand.find(c => c[1] === linea) || null;
@@ -491,6 +566,12 @@
     }
     // Valori della Scheda per PASSAGGIO (F01): una località attraversata più volte ha id loc_1, loc_2, …
     // come le righe del generatore, così il secondo passaggio non sovrascrive il primo.
+    // 1.0.51 (D09): una località RICOSTRUITA con la progressiva di una discrepanza si annuncia solo se un tratto del
+    // viaggio la usa su quella linea (prima compariva anche quando il viaggio prendeva il riscontro esatto di un'altra)
+    for (const a_ of annunci) {
+      const x = sequenza.findIndex(s_ => s_.riga === a_.riga);
+      if (estremi.some(([i0, i1], k) => i0 <= x && x <= i1 && itinerario[k].linea === a_.linea)) R.push(a_.testo);
+    }
     const contaPass = {}, vistiPass = {};
     for (const s of sequenza) if (s.cand.length) contaPass[s.cand[0][0]] = (contaPass[s.cand[0][0]] || 0) + 1;
     for (const s of sequenza) {
@@ -511,7 +592,7 @@
       const ps = { dopo, km, n: r.nome, ord: sequenza[x].ord };
       for (const [k1, k2] of [["grado", "g"], ["vls", "v"], ["simb", "ind"]]) if (r[k1]) ps[k2] = r[k1];
       puntiScheda.push(ps);
-      R.push(`  ~ «${r.nome}» (km ${r.km.join("/")}) non è nel database ma sta fra ${sequenza[dopo].riga.nome} e la località seguente ` +
+      if (!sequenza[x].fuoriLinea) R.push(`  ~ «${r.nome}» (km ${r.km.join("/")}) non è nel database ma sta fra ${sequenza[dopo].riga.nome} e la località seguente ` +
         `sulla linea ${linea}: tenuta come punto della Scheda, il tratto prosegue (caricare la località nel database)`);
     }
     puntiScheda.sort((p, q) => p.ord - q.ord);
@@ -523,7 +604,8 @@
     // dalla prima all'ultima località (della Scheda o della traccia). Altrimenti il viaggio è PARZIALE.
     const lacune = [];
     const nomiTra = (a, b) => sequenza.slice(a, b).map(s => s.riga.nome).join(", ");
-    if (!itinerario.length) lacune.push("nessun tratto riconosciuto");
+    // 1.0.51 (D07): anche senza nessun tratto il rapporto dice dove e fra quali linee il motore non ha potuto scegliere
+    if (!itinerario.length) { lacune.push("nessun tratto riconosciuto"); if (ambigua) lacune.push(ambigua); }
     else {
       if (estremi[0][0] > 0) lacune.push(`origine non riconosciuta: ${nomiTra(0, estremi[0][0])}`);
       for (let k = 0; k + 1 < estremi.length; k++)
