@@ -85,6 +85,8 @@
 
     // ------------------------------------------------------------- itinerario
     const tratti = [];
+    // 1.0.51 (D08): itinerario vuoto = errore chiaro e uguale nei due generatori (prima: errore interno sull'ultima riga)
+    if (!V.itinerario || !V.itinerario.length) throw new Errore("itinerario vuoto: il compositore non ha riconosciuto nessun tratto (vedi il rapporto)");
     V.itinerario.forEach((t, i) => {
       const da = t.da, a = t.a;
       let lid = t.linea;

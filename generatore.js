@@ -160,7 +160,13 @@ async function genGenera(btn) {
     const nomeTreno = c.viaggio.treno_testo || c.viaggio.treno;
     if (!c.viaggio.data || !c.viaggio.treno || c.viaggio.treno === "?")
       return genEsito("Treno non identificato", "", [fact("Problema", "Numero treno o data non leggibili: incolla anche la traccia.", "", "N")], c.rapporto);
-    if (!c.ok) return genEsito("Itinerario non ricostruito", `treno ${nomeTreno}`, [fact("Esito", "Nessun tratto riconosciuto nel database: le linee di questo treno non sono ancora state caricate.", "", "N")], c.rapporto);
+    // 1.0.51 (D10): il motivo vero del compositore (errore, linee in pareggio, località non riconosciute), non sempre
+    // «linee non caricate»
+    if (!c.ok) {
+      const motivo = c.errore ? c.errore : (c.lacune || []).filter(l => l !== "nessun tratto riconosciuto").join(" · ");
+      return genEsito("Itinerario non ricostruito", `treno ${nomeTreno}`, [fact("Esito", "Nessun tratto riconosciuto nel database" +
+        (motivo ? ": " + esc(motivo) : ": località della Scheda non riconosciute (vedi il rapporto qui sotto)"), "", "N")], c.rapporto);
+    }
     let p;
     let disp = new Set(); try { disp = new Set(await DB.chiaviPagineFL()); } catch (_) {}
     try { p = Genera.genera(T, c.viaggio, undefined, disp); }

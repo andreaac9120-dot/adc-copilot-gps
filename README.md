@@ -1,4 +1,4 @@
-# ADC COPILOT 1.0.50 — versione unica
+# ADC COPILOT 1.0.51 — versione unica
 
 Dal 22/10/2026 la fase di prova GPS è conclusa: questa è l'**unica** app ADC COPILOT. Il pacchetto viaggio è uno solo (`<treno>_<data>.adc.json`, scheda 16c del progetto) e contiene coordinate `condotta.GEO` e righe M3 compatte. Il comando «PROCEDI CON PACCHETTO GPS» non esiste più.
 
@@ -8,6 +8,18 @@ La vecchia repository `andreaac9120-dot/adc-copilot` (1.0.2) non è più il bers
 - Per non perdere l'app installata e i viaggi salvati restano **invariati** i nomi tecnici: ID manifest `./gps-pwa`, database IndexedDB `adc-copilot-gps`, cache `adc-copilot-gps-*`, indirizzo del sito. Cambia solo il nome visibile (`ADC COPILOT`).
 - La posizione GPS non viene archiviata. Il GPS richiede coordinate verificate in `condotta.GEO` e non è destinato alla condotta ferroviaria.
 
+
+## 1.0.51 (27/11/2026) – correzioni dal debug di Astra (Blocco 1a, Torino)
+
+Astra ha passato nel motore, come Schede Treno finte, le 146 sezioni delle Sigle Complementari dei FL di Torino (`proposte/DEBUG_LETTORI` del database). Correzioni nel compositore (`motore/componi.js`), nel generatore (`motore/genera.js`) e nell'interfaccia (`generatore.js`), uguali nel Python del database:
+- **D01 – cippo di un'altra linea.** Un «Cippo» generico veniva preso per il cippo del database di un'altra linea alla stessa progressiva (sulla Ceres – Torino il «Cippo 30,000» diventava il Cippo 30/23 della Pavia – Rogoredo). Ora: un punto con la progressiva doppia vale solo se coincidono tutte le progressive stampate; e una riga riconosciuta solo su un'altra linea, che sta fra due località della stessa linea con la progressiva fra le loro, resta **punto della Scheda** su quella linea (*deviazione isolata*, RICOSTRUITO nel rapporto).
+- **D02 – Storica e accesso AV a Torino Stura.** «To Stura Orig.AV 12,347» stampato sulla Storica portava sull'accesso AV: risolto dalla stessa regola (il punto resta fuori dalla Storica, come deciso con m54 del database).
+- **D04 – progressiva stampata.** Per 7 punti il database usa una coordinata interna di ordinamento (es. Torino P.N. −1,092 contro 0,000 stampato; anche P.M. Cantalupo, Savigliano, Valenza e 3 punti di Genova): ora vale anche la progressiva stampata (`km_txt`), con il nome quasi uguale (≥ 0,8). Un nome poco simile alla stessa progressiva non vale più se la Scheda nomina esattamente un'altra località del database («TORINO SM. NORD 0,000» non è Torino P. Nuova).
+- **D06 – refuso stampato.** Come per le discrepanze aperte (1.0.43), anche una discrepanza chiusa come «refuso stampato» (regola A) fa riconoscere la località con l'altra progressiva (Varallo 54,098/54,095).
+- **D07–D10.** Il pareggio fra due linee prima del primo tratto compare nelle lacune; itinerario vuoto = errore chiaro e uguale nei due generatori; la riga RICOSTRUITA di una discrepanza compare solo se il viaggio la usa; nell'app il messaggio «Itinerario non ricostruito» dice il motivo vero.
+- **Non corretti:** D03 (ordine e righe mancanti nelle Sigle del FL 5 p.210: dato del database, serve il PDF); D05 (falso allarme: le Sigle stampano una sola progressiva nei nodi, la Scheda vera le stampa doppie).
+
+Effetto sulle 146 sezioni di Torino: itinerari completi da 80 a 92, parziali da 50 a 42, vuoti da 16 a 12; gli 80 completi di prima restano identici; Python e app danno lo stesso rapporto, viaggio e pacchetto. Scheda reale 67069: invariata (completa). Prove in `tests/debug-astra-1a.test.js` (dati inventati). **Serve rigenerare i viaggi.**
 
 ## 1.0.50 (26/11/2026) – tratto con progressiva locale della Scheda (binario pari Bussoleno – Salbertrand)
 
